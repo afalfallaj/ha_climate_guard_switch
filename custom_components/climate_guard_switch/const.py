@@ -1,4 +1,5 @@
 """Constants for the Climate Guard Switch integration."""
+from homeassistant.const import Platform
 
 DOMAIN = "climate_guard_switch"
 
@@ -19,6 +20,13 @@ DEVICE_TYPE_COOLER = "cooler"
 DEFAULT_RUN_LIMIT = 10
 DEFAULT_COOLDOWN = 40
 DEFAULT_HEARTBEAT = 10
+
+PLATFORMS: list[Platform] = [
+    Platform.SWITCH,
+    Platform.NUMBER,
+    Platform.SENSOR,
+    Platform.BINARY_SENSOR,
+]
 
 # Standard HA Weather States
 WEATHER_STATES = [

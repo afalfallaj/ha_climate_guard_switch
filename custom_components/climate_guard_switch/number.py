@@ -11,7 +11,13 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import GuardSwitchConfigEntry
-from .const import DOMAIN, CONF_TARGET_ENTITY, CONF_DEVICE_TYPE
+from .const import (
+    CONF_COOLDOWN,
+    CONF_RUN_LIMIT,
+    DEFAULT_COOLDOWN,
+    DEFAULT_RUN_LIMIT,
+    DOMAIN,
+)
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -19,25 +25,28 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Climate Guard Switch number entities."""
+    # Get initial values from config (merged data+options logic not strictly needed here if we read direct)
+    # But usually options have overrides.
+    
     async_add_entities(
         [
             GuardSwitchNumber(
                 config_entry,
-                "run_limit",
+                CONF_RUN_LIMIT,
                 "Run Limit",
-                "run_limit_minutes",
                 UnitOfTime.MINUTES,
-                1,
+                0,
                 120,
+                DEFAULT_RUN_LIMIT,
             ),
             GuardSwitchNumber(
                 config_entry,
-                "cooldown",
+                CONF_COOLDOWN,
                 "Cooldown",
-                "cooldown_minutes",
                 UnitOfTime.MINUTES,
                 0,
                 300,
+                DEFAULT_COOLDOWN,
             ),
         ]
     )
@@ -51,15 +60,15 @@ class GuardSwitchNumber(RestoreNumber):
         config_entry: GuardSwitchConfigEntry,
         key: str,
         name: str,
-        translation_key: str,
         unit_of_measurement: str | None,
         min_value: float,
         max_value: float,
+        default_value: int,
     ) -> None:
         """Initialize the number."""
         self._config_entry = config_entry
         self._key = key
-        self._attr_translation_key = key # Using key as translation key part
+        self._attr_translation_key = key
         self._attr_has_entity_name = True
         self._attr_name = name
         self._attr_unique_id = f"{config_entry.entry_id}_{key}"
@@ -68,32 +77,22 @@ class GuardSwitchNumber(RestoreNumber):
         self._attr_native_max_value = max_value
         self._attr_mode = NumberMode.BOX
         
-        # Initial value from runtime data
-        current_val = getattr(config_entry.runtime_data, key if key != "heartbeat" else "heartbeat_interval")
-        self._attr_native_value = float(current_val)
+        self._default_value = default_value
 
-        # Device Info
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, config_entry.entry_id)},
-            name=config_entry.title,
-            manufacturer="Custom",
-            model="Climate Guard Switch",
-        )
-
-    async def async_added_to_hass(self) -> None:
-        """Restore last state."""
-        await super().async_added_to_hass()
-        if (last_state := await self.async_get_last_number_data()) is not None:
-            self._attr_native_value = last_state.native_value
-            self._update_runtime_data()
+    @property
+    def native_value(self) -> float:
+        """Return the value."""
+        # Read from options, fallback to data, fallback to default
+        val = self._config_entry.options.get(self._key, self._config_entry.data.get(self._key, self._default_value))
+        return float(val)
 
     async def async_set_native_value(self, value: float) -> None:
         """Update value."""
-        self._attr_native_value = value
-        self._update_runtime_data()
-        self.async_write_ha_state()
-
-    def _update_runtime_data(self) -> None:
-        """Update the shared runtime data."""
-        attr_name = self._key if self._key != "heartbeat" else "heartbeat_interval"
-        setattr(self._config_entry.runtime_data, attr_name, int(self._attr_native_value))
+        # Update Options
+        new_options = {**self._config_entry.options}
+        new_options[self._key] = int(value)
+        
+        # This will trigger reload of the entry
+        await self.hass.config_entries.async_update_entry(
+            self._config_entry, options=new_options
+        )
