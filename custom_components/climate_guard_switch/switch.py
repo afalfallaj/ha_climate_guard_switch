@@ -60,7 +60,10 @@ class ClimateGuardSwitch(SwitchEntity, RestoreEntity):
         self._attr_has_entity_name = True
         self._attr_name = None # Use device name as prefix
         self._attr_unique_id = config_entry.entry_id
-        self._attr_is_on = False
+        
+        # Internal State
+        self._guard_enabled = False # This is the state of the Switch Entity (Optimistic)
+        self._target_is_active = False # This is the actual state of the Hardware
         
         # Configuration
         self._target_entity = self._config[CONF_TARGET_ENTITY]
@@ -75,6 +78,7 @@ class ClimateGuardSwitch(SwitchEntity, RestoreEntity):
         self._run_start_time: datetime | None = None
         self._heartbeat_remove_listener: Any = None
         self._cooldown_bypass: bool = False
+        self._block_reason: str | None = None
 
         # Device Info
         self._attr_device_info = DeviceInfo(
@@ -88,8 +92,13 @@ class ClimateGuardSwitch(SwitchEntity, RestoreEntity):
     def icon(self) -> str | None:
         """Return the icon to use in the frontend."""
         if self._device_type == DEVICE_TYPE_HEATER:
-            return "mdi:fire" if self._attr_is_on else "mdi:fire-off"
-        return "mdi:snowflake" if self._attr_is_on else "mdi:snowflake-off"
+            return "mdi:fire" if self._target_is_active else "mdi:fire-off"
+        return "mdi:snowflake" if self._target_is_active else "mdi:snowflake-off"
+    
+    @property
+    def is_on(self) -> bool:
+        """Return true if switch is on (Guard Enabled)."""
+        return self._guard_enabled
 
     # Properties that read dynamically from runtime data
     @property
@@ -110,55 +119,65 @@ class ClimateGuardSwitch(SwitchEntity, RestoreEntity):
         last_state = await self.async_get_last_state()
         
         if last_state:
-            # Restore last run time from extra attributes if available
-            # We will persist it in extra_state_attributes for restoration
+            # Restore Guard State
+            self._guard_enabled = last_state.state == STATE_ON
+            
+            # Restore run timings
             last_run_ts = last_state.attributes.get("last_run_time")
             if last_run_ts:
                 self._last_run_time = dt_util.parse_datetime(last_run_ts)
+        else:
+            self._guard_enabled = False
 
-        # Default to OFF on restart for safety
-        self._attr_is_on = False
-
-        # Listen for thermostat changes if configured
+        # Listen for Trigger Changes (Gates)
+        entities_to_watch = []
+        if self._sun_entity:
+            entities_to_watch.append(self._sun_entity)
+        if self._weather_entity:
+            entities_to_watch.append(self._weather_entity)
         if self._climate_entity:
+            entities_to_watch.append(self._climate_entity)
+            
+        if entities_to_watch:
             self.async_on_remove(
                 async_track_state_change_event(
-                    self.hass, [self._climate_entity], self._on_climate_change
+                    self.hass, entities_to_watch, self._on_dependency_change
                 )
             )
 
+        # Initial Check
+        await self._async_check_and_update()
+
     @callback
-    def _on_climate_change(self, event: Event) -> None:
-        """Handle climate state changes."""
-        old_state: State | None = event.data.get("old_state")
-        new_state: State | None = event.data.get("new_state")
+    async def _on_dependency_change(self, event: Event) -> None:
+        """Handle state changes in dependencies (Sun, Weather, Climate)."""
+        entity_id = event.data.get("entity_id")
+        
+        # Climate Bypass Logic
+        if entity_id == self._climate_entity:
+            old_state = event.data.get("old_state")
+            new_state = event.data.get("new_state")
+            if old_state and new_state:
+                 old_temp = old_state.attributes.get(ATTR_TEMPERATURE)
+                 new_temp = new_state.attributes.get(ATTR_TEMPERATURE)
+                 if old_temp != new_temp:
+                     _LOGGER.info("%s: Climate target changed. Bypassing cooldown.", self.name)
+                     self._cooldown_bypass = True
 
-        if not old_state or not new_state:
-            return
-
-        # Check if Target Temperature changed
-        old_temp = old_state.attributes.get(ATTR_TEMPERATURE)
-        new_temp = new_state.attributes.get(ATTR_TEMPERATURE)
-
-        if old_temp != new_temp:
-            _LOGGER.info(
-                "Climate %s target changed from %s to %s. Bypassing cooldown for next run.",
-                self._climate_entity,
-                old_temp,
-                new_temp,
-            )
-            self._cooldown_bypass = True
+        # Re-evaluate logic
+        await self._async_check_and_update()
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the state attributes."""
         return {
+            "guard_state": "Active (Running)" if self._target_is_active else f"Idle ({self._block_reason or 'Off'})",
+            "target_is_active": self._target_is_active,
             "last_run_time": self._last_run_time.isoformat() if self._last_run_time else None,
             "run_start_time": self._run_start_time.isoformat() if self._run_start_time else None,
             "cooldown_active": self._is_cooldown_active(),
             "cooldown_bypass_armed": self._cooldown_bypass,
             "target_entity": self._target_entity,
-            "device_type": self._device_type,
         }
 
     def _is_cooldown_active(self) -> bool:
@@ -166,110 +185,114 @@ class ClimateGuardSwitch(SwitchEntity, RestoreEntity):
         if not self._last_run_time:
             return False
         diff = dt_util.now() - self._last_run_time
-        is_active = diff < self._cooldown
-        if is_active:
-            _LOGGER.debug(
-                "%s: Cooldown active. Last run: %s, Diff: %s, Limit: %s",
-                self.name,
-                self._last_run_time,
-                diff,
-                self._cooldown,
-            )
-        return is_active
+        return diff < self._cooldown
 
-    def _check_environment(self) -> bool:
-        """Check environmental gates. Return True if safe to run."""
+    def _check_conditions(self) -> tuple[bool, str | None]:
+        """Check all gates. Return (IsAllowed, Reason)."""
         # 1. Sun Check
         if self._sun_entity:
             sun_state = self.hass.states.get(self._sun_entity)
             if sun_state and sun_state.state != "above_horizon":
-                 _LOGGER.debug(
-                     "%s: Blocked | Sun is %s (Must be above_horizon)", self.name, sun_state.state
-
-                 )
-                 return False
-            _LOGGER.debug("%s: Sun check pass (%s)", self.name, sun_state.state if sun_state else "None")
+                 return False, f"Sun is {sun_state.state}"
 
         # 2. Weather Check
         if self._weather_entity and self._allowed_weather:
             weather_state = self.hass.states.get(self._weather_entity)
             if not weather_state:
-                 _LOGGER.debug("%s: Blocked | Weather entity %s unavailable", self.name, self._weather_entity)
-
-                 return False
+                 return False, "Weather unavailable"
             
             if weather_state.state not in self._allowed_weather:
-                 _LOGGER.debug(
-                     "%s: Blocked | Weather is %s (Allowed: %s)",
-                     self.name,
-                     weather_state.state,
-                     self._allowed_weather,
-                 )
-                 return False
-            _LOGGER.debug("%s: Weather check pass (%s)", self.name, weather_state.state)
+                 return False, f"Weather is {weather_state.state}"
 
-        return True
-
-    async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn the switch on."""
-        now = dt_util.now()
-        _LOGGER.debug("%s: Request to Turn ON", self.name)
-
-        # 1. Cooldown Check
+        # 3. Cooldown Check
         if self._is_cooldown_active():
              if self._cooldown_bypass:
-                 _LOGGER.info(
-                     "%s: Cooldown active but BYPASSED by user override (ticket consumed)", self.name
-                 )
-                 self._cooldown_bypass = False # Consume ticket
+                 _LOGGER.info("%s: Cooldown bypassed by user override.", self.name)
+                 # Note: We don't consume ticket here, we consume it when we actually turn ON
              else:
-                 remaining = (self._last_run_time + self._cooldown) - now
-                 _LOGGER.debug("%s: Blocked | Cooldown active. Remaining: %s", self.name, remaining)
-                 return
+                 remaining = (self._last_run_time + self._cooldown) - dt_util.now()
+                 return False, f"Cooldown ({str(remaining).split('.')[0]})"
 
-        # 2. Environmental Check (Always enforced)
-        if not self._check_environment():
-            # If rejected by environment, we KEEP the bypass ticket for later? 
-            # Or consume it? Let's keep it safe: Keep it.
+        return True, None
+
+    async def _async_check_and_update(self):
+        """Core Logic Loop: Evaluate Guard + Conditions -> Target."""
+        if not self._guard_enabled:
+            # Guard Disabled -> Force OFF
+            if self._target_is_active:
+                await self._stop_target()
+            self._block_reason = "Guard Disabled"
+            self.async_write_ha_state()
             return
 
-        # 3. Activation
-        _LOGGER.debug("%s: Checks passed. Turning ON.", self.name)
-        self._attr_is_on = True
-        self._run_start_time = now
-        self._cooldown_bypass = False # Reset just in case
-        self.async_write_ha_state() # Optimistic update
+        # Guard Enabled: Check Conditions
+        is_allowed, reason = self._check_conditions()
+        self._block_reason = reason
 
-        # Start Heartbeat if enabled (interval > 0)
-        if self._heartbeat_interval.total_seconds() > 0:
-            _LOGGER.debug("%s: Starting heartbeat loop.", self.name)
-            self._start_heartbeat()
+        if is_allowed:
+            # Safe to Run
+            if not self._target_is_active:
+                await self._start_target()
+            # If already running, ensure heartbeat is active
+            if self._heartbeat_interval.total_seconds() > 0:
+                 self._ensure_heartbeat_running()
+        else:
+            # Not Safe to Run
+            if self._target_is_active:
+                _LOGGER.info("%s: Conditions no longer met (%s). Stopping.", self.name, reason)
+                await self._stop_target()
+
+        self.async_write_ha_state()
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Enable the Guard (Arm the system)."""
+        _LOGGER.debug("%s: Guard Enabled.", self.name)
+        self._guard_enabled = True
+        await self._async_check_and_update()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Disable the Guard (Disarm the system)."""
+        _LOGGER.debug("%s: Guard Disabled.", self.name)
+        self._guard_enabled = False
+        await self._async_check_and_update()
+
+    async def _start_target(self):
+        """Actually turn on the hardware."""
+        _LOGGER.info("%s: Starting Target %s", self.name, self._target_entity)
+        if self._cooldown_bypass:
+            self._cooldown_bypass = False # Consume ticket
+            
+        self._target_is_active = True
+        self._run_start_time = dt_util.now()
         
         # Initial Pulse
         await self._pulse_target_on()
+        
+        if self._heartbeat_interval.total_seconds() > 0:
+             self._ensure_heartbeat_running()
 
-    async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn the switch off."""
+    async def _stop_target(self):
+        """Actually turn off the hardware."""
+        _LOGGER.info("%s: Stopping Target %s", self.name, self._target_entity)
         self._stop_heartbeat()
         
-        # Send OFF to hardware
         await self.hass.services.async_call(
             "switch",
             SERVICE_TURN_OFF,
             {ATTR_ENTITY_ID: self._target_entity},
-            blocking=False, # Don't block for this
+            blocking=False,
         )
 
-        self._attr_is_on = False
-        self._last_run_time = dt_util.now()
+        self._target_is_active = False
+        self._last_run_time = dt_util.now() # Mark cooldown start
         self._run_start_time = None
-        self.async_write_ha_state()
 
-    def _start_heartbeat(self):
-        """Start the heartbeat loop."""
+    def _ensure_heartbeat_running(self):
+        """Start the heartbeat loop if not running."""
         if self._heartbeat_remove_listener:
             return
 
+        _LOGGER.debug("%s: Starting heartbeat loop.", self.name)
         self._heartbeat_remove_listener = async_track_time_interval(
             self.hass,
             self._heartbeat_tick,
@@ -279,20 +302,25 @@ class ClimateGuardSwitch(SwitchEntity, RestoreEntity):
     def _stop_heartbeat(self):
         """Stop the heartbeat loop."""
         if self._heartbeat_remove_listener:
+            _LOGGER.debug("%s: Stopping heartbeat loop.", self.name)
             self._heartbeat_remove_listener()
             self._heartbeat_remove_listener = None
 
     async def _heartbeat_tick(self, now: datetime):
         """Called periodically by heartbeat timer."""
-        # 1. Run Limit Check
-        if self._run_start_time and (now - self._run_start_time > self._run_limit):
-             _LOGGER.info("Climate Guard Switch: Run limit reached (%s). Turning off.", self._run_limit)
-             await self.async_turn_off()
+        # Active Check 1: Run Limit
+        if self._target_is_active and self._run_start_time:
+             if now - self._run_start_time > self._run_limit:
+                 _LOGGER.info("%s: Run limit reached. Stopping.", self.name)
+                 await self._stop_target()
+                 return # Loop stopped in _stop_target
 
-             return
-
-        # 2. Pulse Hardware
-        await self._pulse_target_on()
+        # Active Check 2: Pulse
+        if self._target_is_active:
+             await self._pulse_target_on()
+        
+        # Periodic Re-evaluation (In case events missed)
+        await self._async_check_and_update()
 
     async def _pulse_target_on(self):
         """Send turn_on command to target entity."""
@@ -301,9 +329,7 @@ class ClimateGuardSwitch(SwitchEntity, RestoreEntity):
                 "switch",
                 SERVICE_TURN_ON,
                 {ATTR_ENTITY_ID: self._target_entity},
-                blocking=True, # Wait for it to ensure it was sent
+                blocking=True,
             )
         except Exception as err:
-             _LOGGER.warning("Climate Guard Switch: Failed to pulse target %s: %s", self._target_entity, err)
-
-
+             _LOGGER.warning("%s: Failed to pulse target: %s", self.name, err)
