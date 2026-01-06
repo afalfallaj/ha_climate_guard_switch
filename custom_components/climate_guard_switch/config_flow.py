@@ -85,12 +85,11 @@ def _get_config_schema(defaults: dict[str, Any] | None = None, is_options: bool 
         )
     )
     
-    # Heartbeat Interval (Only in initial setup, per user request)
-    if not is_options:
-        schema[vol.Optional(
-            CONF_HEARTBEAT,
-            description={"suggested_value": defaults.get(CONF_HEARTBEAT, DEFAULT_HEARTBEAT)}
-        )] = vol.All(vol.Coerce(int), vol.Range(min=0))
+    # Heartbeat Interval
+    schema[vol.Optional(
+        CONF_HEARTBEAT,
+        description={"suggested_value": defaults.get(CONF_HEARTBEAT, DEFAULT_HEARTBEAT)}
+    )] = vol.All(vol.Coerce(int), vol.Range(min=0))
     
     return vol.Schema(schema)
 
@@ -128,7 +127,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
-        self.config_entry = config_entry
+        self._config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -138,7 +137,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data=user_input)
 
         # Merge defaults from data (original config) and options (previous edits)
-        current_config = {**self.config_entry.data, **self.config_entry.options}
+        current_config = {**self._config_entry.data, **self._config_entry.options}
 
         return self.async_show_form(
             step_id="init",

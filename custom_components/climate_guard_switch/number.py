@@ -39,15 +39,6 @@ async def async_setup_entry(
                 0,
                 300,
             ),
-             GuardSwitchNumber(
-                config_entry,
-                "heartbeat",
-                "Heartbeat Interval",
-                "heartbeat_interval_seconds",
-                UnitOfTime.SECONDS,
-                0,
-                60,
-            ),
         ]
     )
 
