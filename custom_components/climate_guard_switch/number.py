@@ -72,6 +72,14 @@ class GuardSwitchNumber(RestoreNumber):
         self._attr_native_min_value = min_value
         self._attr_native_max_value = max_value
         self._attr_mode = NumberMode.BOX
+        
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, config_entry.entry_id)},
+            name=config_entry.title,
+            manufacturer="Custom",
+            model="Climate Guard Switch",
+        )
+        
         self._default_value = default_value
 
     @property
