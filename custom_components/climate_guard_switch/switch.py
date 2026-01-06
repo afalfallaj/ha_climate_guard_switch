@@ -183,7 +183,7 @@ class ClimateGuardSwitch(SwitchEntity, RestoreEntity):
         if self._sun_entity:
             sun_state = self.hass.states.get(self._sun_entity)
             if sun_state and sun_state.state != "above_horizon":
-                 _LOGGER.warning(
+                 _LOGGER.debug(
                      "%s: Blocked | Sun is %s (Must be above_horizon)", self.name, sun_state.state
 
                  )
@@ -194,12 +194,12 @@ class ClimateGuardSwitch(SwitchEntity, RestoreEntity):
         if self._weather_entity and self._allowed_weather:
             weather_state = self.hass.states.get(self._weather_entity)
             if not weather_state:
-                 _LOGGER.warning("%s: Blocked | Weather entity %s unavailable", self.name, self._weather_entity)
+                 _LOGGER.debug("%s: Blocked | Weather entity %s unavailable", self.name, self._weather_entity)
 
                  return False
             
             if weather_state.state not in self._allowed_weather:
-                 _LOGGER.warning(
+                 _LOGGER.debug(
                      "%s: Blocked | Weather is %s (Allowed: %s)",
                      self.name,
                      weather_state.state,
@@ -224,7 +224,7 @@ class ClimateGuardSwitch(SwitchEntity, RestoreEntity):
                  self._cooldown_bypass = False # Consume ticket
              else:
                  remaining = (self._last_run_time + self._cooldown) - now
-                 _LOGGER.warning("%s: Blocked | Cooldown active. Remaining: %s", self.name, remaining)
+                 _LOGGER.debug("%s: Blocked | Cooldown active. Remaining: %s", self.name, remaining)
                  return
 
         # 2. Environmental Check (Always enforced)

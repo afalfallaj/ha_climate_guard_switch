@@ -27,60 +27,71 @@ from .const import (
 )
 
 
-def _get_config_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
+def _get_config_schema(defaults: dict[str, Any] | None = None, is_options: bool = False) -> vol.Schema:
     """Return the configuration schema with optional defaults."""
     defaults = defaults or {}
     
-    # Helper to create schema dictionary
-    schema = {
-        vol.Required(
-            CONF_TARGET_ENTITY, 
-            description={"suggested_value": defaults.get(CONF_TARGET_ENTITY)}
-        ): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="switch")
-        ),
-        vol.Required(
+    schema = {}
+    
+    # Target Entity (Always editable)
+    schema[vol.Required(
+        CONF_TARGET_ENTITY,
+        description={"suggested_value": defaults.get(CONF_TARGET_ENTITY)}
+    )] = selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="switch")
+    )
+    
+    # Device Type (Only show in initial setup, changing it later is confusing for ID)
+    if not is_options:
+        schema[vol.Required(
             CONF_DEVICE_TYPE,
             description={"suggested_value": defaults.get(CONF_DEVICE_TYPE)}
-        ): selector.SelectSelector(
+        )] = selector.SelectSelector(
             selector.SelectSelectorConfig(
                 options=[DEVICE_TYPE_HEATER, DEVICE_TYPE_COOLER],
                 mode=selector.SelectSelectorMode.DROPDOWN,
             )
-        ),
-        vol.Optional(
-            CONF_SUN_ENTITY,
-            description={"suggested_value": defaults.get(CONF_SUN_ENTITY)}
-        ): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="sun")
-        ),
-        vol.Optional(
-            CONF_WEATHER_ENTITY,
-            description={"suggested_value": defaults.get(CONF_WEATHER_ENTITY)}
-        ): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="weather")
-        ),
-        vol.Optional(
-            CONF_CLIMATE_ENTITY,
-            description={"suggested_value": defaults.get(CONF_CLIMATE_ENTITY)}
-        ): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="climate")
-        ),
-        vol.Optional(
-            CONF_ALLOWED_WEATHER,
-            description={"suggested_value": defaults.get(CONF_ALLOWED_WEATHER)}
-        ): selector.SelectSelector(
-            selector.SelectSelectorConfig(
-                options=WEATHER_STATES,
-                multiple=True,
-                mode=selector.SelectSelectorMode.DROPDOWN,
-            )
-        ),
-        vol.Optional(
+        )
+
+    # Optional Gates & Links
+    schema[vol.Optional(
+        CONF_SUN_ENTITY,
+        description={"suggested_value": defaults.get(CONF_SUN_ENTITY)}
+    )] = selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="sun")
+    )
+    
+    schema[vol.Optional(
+        CONF_WEATHER_ENTITY,
+        description={"suggested_value": defaults.get(CONF_WEATHER_ENTITY)}
+    )] = selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="weather")
+    )
+    
+    schema[vol.Optional(
+        CONF_CLIMATE_ENTITY,
+        description={"suggested_value": defaults.get(CONF_CLIMATE_ENTITY)}
+    )] = selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="climate")
+    )
+    
+    schema[vol.Optional(
+        CONF_ALLOWED_WEATHER,
+        description={"suggested_value": defaults.get(CONF_ALLOWED_WEATHER)}
+    )] = selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=WEATHER_STATES,
+            multiple=True,
+            mode=selector.SelectSelectorMode.DROPDOWN,
+        )
+    )
+    
+    # Heartbeat Interval (Only in initial setup, per user request)
+    if not is_options:
+        schema[vol.Optional(
             CONF_HEARTBEAT,
             description={"suggested_value": defaults.get(CONF_HEARTBEAT, DEFAULT_HEARTBEAT)}
-        ): vol.All(vol.Coerce(int), vol.Range(min=0)),
-    }
+        )] = vol.All(vol.Coerce(int), vol.Range(min=0))
     
     return vol.Schema(schema)
 
@@ -134,5 +145,5 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
         return self.async_show_form(
             step_id="init",
-            data_schema=_get_config_schema(current_config),
+            data_schema=_get_config_schema(current_config, is_options=True),
         )
