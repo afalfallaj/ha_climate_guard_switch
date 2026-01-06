@@ -27,6 +27,64 @@ from .const import (
 )
 
 
+def _get_config_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
+    """Return the configuration schema with optional defaults."""
+    defaults = defaults or {}
+    
+    # Helper to create schema dictionary
+    schema = {
+        vol.Required(
+            CONF_TARGET_ENTITY, 
+            description={"suggested_value": defaults.get(CONF_TARGET_ENTITY)}
+        ): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="switch")
+        ),
+        vol.Required(
+            CONF_DEVICE_TYPE,
+            description={"suggested_value": defaults.get(CONF_DEVICE_TYPE)}
+        ): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=[DEVICE_TYPE_HEATER, DEVICE_TYPE_COOLER],
+                mode=selector.SelectSelectorMode.DROPDOWN,
+            )
+        ),
+        vol.Optional(
+            CONF_SUN_ENTITY,
+            description={"suggested_value": defaults.get(CONF_SUN_ENTITY)}
+        ): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sun")
+        ),
+        vol.Optional(
+            CONF_WEATHER_ENTITY,
+            description={"suggested_value": defaults.get(CONF_WEATHER_ENTITY)}
+        ): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="weather")
+        ),
+        vol.Optional(
+            CONF_CLIMATE_ENTITY,
+            description={"suggested_value": defaults.get(CONF_CLIMATE_ENTITY)}
+        ): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="climate")
+        ),
+        vol.Optional(
+            CONF_ALLOWED_WEATHER,
+            description={"suggested_value": defaults.get(CONF_ALLOWED_WEATHER)}
+        ): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=WEATHER_STATES,
+                multiple=True,
+                mode=selector.SelectSelectorMode.DROPDOWN,
+            )
+        ),
+        vol.Optional(
+            CONF_HEARTBEAT,
+            description={"suggested_value": defaults.get(CONF_HEARTBEAT, DEFAULT_HEARTBEAT)}
+        ): vol.All(vol.Coerce(int), vol.Range(min=0)),
+    }
+    
+    return vol.Schema(schema)
+
+
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Climate Guard Switch."""
 
@@ -45,37 +103,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_TARGET_ENTITY): selector.EntitySelector(
-                        selector.EntitySelectorConfig(domain="switch")
-                    ),
-                    vol.Required(CONF_DEVICE_TYPE): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=[DEVICE_TYPE_HEATER, DEVICE_TYPE_COOLER],
-                            mode=selector.SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                    vol.Optional(CONF_SUN_ENTITY): selector.EntitySelector(
-                        selector.EntitySelectorConfig(domain="sun")
-                    ),
-                    vol.Optional(CONF_WEATHER_ENTITY): selector.EntitySelector(
-                        selector.EntitySelectorConfig(domain="weather")
-                    ),
-                    vol.Optional(CONF_CLIMATE_ENTITY): selector.EntitySelector(
-                        selector.EntitySelectorConfig(domain="climate")
-                    ),
-                    vol.Optional(CONF_ALLOWED_WEATHER): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=WEATHER_STATES,
-                            multiple=True,
-                            mode=selector.SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_HEARTBEAT, default=DEFAULT_HEARTBEAT
-                    ): vol.All(vol.Coerce(int), vol.Range(min=0)),
-                }
+            data_schema=_get_config_schema(),
         )
     
     @staticmethod
@@ -106,55 +134,5 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional(
-                        CONF_TARGET_ENTITY,
-                        description={"suggested_value": current_config.get(CONF_TARGET_ENTITY)}
-                    ): selector.EntitySelector(
-                        selector.EntitySelectorConfig(domain="switch")
-                    ),
-                    vol.Optional(
-                        CONF_DEVICE_TYPE,
-                        description={"suggested_value": current_config.get(CONF_DEVICE_TYPE)}
-                    ): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=[DEVICE_TYPE_HEATER, DEVICE_TYPE_COOLER],
-                            mode=selector.SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_SUN_ENTITY,
-                        description={"suggested_value": current_config.get(CONF_SUN_ENTITY)}
-                    ): selector.EntitySelector(
-                         selector.EntitySelectorConfig(domain="sun")
-                    ),
-                    vol.Optional(
-                        CONF_WEATHER_ENTITY,
-                         description={"suggested_value": current_config.get(CONF_WEATHER_ENTITY)}
-                    ): selector.EntitySelector(
-                         selector.EntitySelectorConfig(domain="weather")
-                    ),
-                    vol.Optional(
-                        CONF_CLIMATE_ENTITY,
-                        description={"suggested_value": current_config.get(CONF_CLIMATE_ENTITY)}
-                    ): selector.EntitySelector(
-                         selector.EntitySelectorConfig(domain="climate")
-                    ),
-                    vol.Optional(
-                        CONF_ALLOWED_WEATHER,
-                        description={"suggested_value": current_config.get(CONF_ALLOWED_WEATHER)}
-                    ): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=WEATHER_STATES,
-                            multiple=True,
-                            mode=selector.SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_HEARTBEAT,
-                        description={"suggested_value": current_config.get(CONF_HEARTBEAT, DEFAULT_HEARTBEAT)}
-                    ): vol.All(vol.Coerce(int), vol.Range(min=0)),
-                }
-            ),
+            data_schema=_get_config_schema(current_config),
         )
