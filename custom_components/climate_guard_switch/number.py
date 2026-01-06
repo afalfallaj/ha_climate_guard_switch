@@ -10,7 +10,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import GuardSwitchConfigEntry
 from .const import (
     CONF_COOLDOWN,
     CONF_RUN_LIMIT,
@@ -21,32 +20,30 @@ from .const import (
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: GuardSwitchConfigEntry,
+    config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Climate Guard Switch number entities."""
-    # Get initial values from config (merged data+options logic not strictly needed here if we read direct)
-    # But usually options have overrides.
     
     async_add_entities(
         [
             GuardSwitchNumber(
                 config_entry,
-                CONF_RUN_LIMIT,
-                "Run Limit",
-                UnitOfTime.MINUTES,
-                0,
-                120,
-                DEFAULT_RUN_LIMIT,
+                key=CONF_RUN_LIMIT,
+                translation_key="run_limit",
+                unit_of_measurement=UnitOfTime.MINUTES,
+                min_value=0,
+                max_value=120,
+                default_value=DEFAULT_RUN_LIMIT,
             ),
             GuardSwitchNumber(
                 config_entry,
-                CONF_COOLDOWN,
-                "Cooldown",
-                UnitOfTime.MINUTES,
-                0,
-                300,
-                DEFAULT_COOLDOWN,
+                key=CONF_COOLDOWN,
+                translation_key="cooldown",
+                unit_of_measurement=UnitOfTime.MINUTES,
+                min_value=0,
+                max_value=300,
+                default_value=DEFAULT_COOLDOWN,
             ),
         ]
     )
@@ -57,9 +54,9 @@ class GuardSwitchNumber(RestoreNumber):
 
     def __init__(
         self,
-        config_entry: GuardSwitchConfigEntry,
+        config_entry: ConfigEntry,
         key: str,
-        name: str,
+        translation_key: str,
         unit_of_measurement: str | None,
         min_value: float,
         max_value: float,
@@ -68,15 +65,13 @@ class GuardSwitchNumber(RestoreNumber):
         """Initialize the number."""
         self._config_entry = config_entry
         self._key = key
-        self._attr_translation_key = key
+        self._attr_translation_key = translation_key
         self._attr_has_entity_name = True
-        self._attr_name = name
-        self._attr_unique_id = f"{config_entry.entry_id}_{key}"
+        self._attr_unique_id = f"{config_entry.entry_id}_{key}"        
         self._attr_native_unit_of_measurement = unit_of_measurement
         self._attr_native_min_value = min_value
         self._attr_native_max_value = max_value
         self._attr_mode = NumberMode.BOX
-        
         self._default_value = default_value
 
     @property
