@@ -25,15 +25,17 @@ async def async_get_config_entry_diagnostics(
             return state.as_dict()
         return {"state": "unknown", "entity_id": entity_id}
 
-    config_data = async_redact_data(entry.data, TO_REDACT)
+    # Merge config and options to show effective config
+    effective_config = {**entry.data, **entry.options}
+    config_data = async_redact_data(effective_config, TO_REDACT)
     runtime_data = vars(entry.runtime_data) if entry.runtime_data else None
 
     # Snapshot of related entities
     related_states = {
-        "target": _get_state(entry.data.get(CONF_TARGET_ENTITY)),
-        "sun": _get_state(entry.data.get(CONF_SUN_ENTITY)),
-        "weather": _get_state(entry.data.get(CONF_WEATHER_ENTITY)),
-        "climate": _get_state(entry.data.get(CONF_CLIMATE_ENTITY)),
+        "target": _get_state(effective_config.get(CONF_TARGET_ENTITY)),
+        "sun": _get_state(effective_config.get(CONF_SUN_ENTITY)),
+        "weather": _get_state(effective_config.get(CONF_WEATHER_ENTITY)),
+        "climate": _get_state(effective_config.get(CONF_CLIMATE_ENTITY)),
     }
 
     return {

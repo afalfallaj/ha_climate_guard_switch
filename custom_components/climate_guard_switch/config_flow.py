@@ -15,10 +15,11 @@ from .const import (
     CONF_ALLOWED_WEATHER,
     CONF_CLIMATE_ENTITY,
     CONF_DEVICE_TYPE,
-    CONF_HEARTBEAT_ENABLED,
+    CONF_HEARTBEAT,
     CONF_SUN_ENTITY,
     CONF_TARGET_ENTITY,
     CONF_WEATHER_ENTITY,
+    DEFAULT_HEARTBEAT,
     DEVICE_TYPE_COOLER,
     DEVICE_TYPE_HEATER,
     DOMAIN,
@@ -71,7 +72,89 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             mode=selector.SelectSelectorMode.DROPDOWN,
                         )
                     ),
-                    vol.Optional(CONF_HEARTBEAT_ENABLED, default=True): bool,
+                    vol.Optional(
+                        CONF_HEARTBEAT, default=DEFAULT_HEARTBEAT
+                    ): vol.All(vol.Coerce(int), vol.Range(min=0)),
+                }
+        )
+    
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Create the options flow."""
+        return OptionsFlowHandler(config_entry)
+
+
+class OptionsFlowHandler(config_entries.OptionsFlow):
+    """Climate Guard Switch options flow."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage the options."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        # Merge defaults from data (original config) and options (previous edits)
+        current_config = {**self.config_entry.data, **self.config_entry.options}
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        CONF_TARGET_ENTITY,
+                        description={"suggested_value": current_config.get(CONF_TARGET_ENTITY)}
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="switch")
+                    ),
+                    vol.Optional(
+                        CONF_DEVICE_TYPE,
+                        description={"suggested_value": current_config.get(CONF_DEVICE_TYPE)}
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[DEVICE_TYPE_HEATER, DEVICE_TYPE_COOLER],
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_SUN_ENTITY,
+                        description={"suggested_value": current_config.get(CONF_SUN_ENTITY)}
+                    ): selector.EntitySelector(
+                         selector.EntitySelectorConfig(domain="sun")
+                    ),
+                    vol.Optional(
+                        CONF_WEATHER_ENTITY,
+                         description={"suggested_value": current_config.get(CONF_WEATHER_ENTITY)}
+                    ): selector.EntitySelector(
+                         selector.EntitySelectorConfig(domain="weather")
+                    ),
+                    vol.Optional(
+                        CONF_CLIMATE_ENTITY,
+                        description={"suggested_value": current_config.get(CONF_CLIMATE_ENTITY)}
+                    ): selector.EntitySelector(
+                         selector.EntitySelectorConfig(domain="climate")
+                    ),
+                    vol.Optional(
+                        CONF_ALLOWED_WEATHER,
+                        description={"suggested_value": current_config.get(CONF_ALLOWED_WEATHER)}
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=WEATHER_STATES,
+                            multiple=True,
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_HEARTBEAT,
+                        description={"suggested_value": current_config.get(CONF_HEARTBEAT, DEFAULT_HEARTBEAT)}
+                    ): vol.All(vol.Coerce(int), vol.Range(min=0)),
                 }
             ),
         )

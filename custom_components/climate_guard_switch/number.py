@@ -45,7 +45,7 @@ async def async_setup_entry(
                 "Heartbeat Interval",
                 "heartbeat_interval_seconds",
                 UnitOfTime.SECONDS,
-                5,
+                0,
                 60,
             ),
         ]

@@ -34,14 +34,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: GuardSwitchConfigEntry) 
     """Set up Climate Guard Switch from a config entry."""
     
     # Initialize runtime data from config or defaults
+    # Merge data and options (options take precedence)
+    config = {**entry.data, **entry.options}
+    
     entry.runtime_data = GuardSwitchRuntimeData(
-        run_limit=entry.data.get(CONF_RUN_LIMIT, DEFAULT_RUN_LIMIT),
-        cooldown=entry.data.get(CONF_COOLDOWN, DEFAULT_COOLDOWN),
-        heartbeat_interval=entry.data.get(CONF_HEARTBEAT, DEFAULT_HEARTBEAT),
+        run_limit=config.get(CONF_RUN_LIMIT, DEFAULT_RUN_LIMIT),
+        cooldown=config.get(CONF_COOLDOWN, DEFAULT_COOLDOWN),
+        heartbeat_interval=config.get(CONF_HEARTBEAT, DEFAULT_HEARTBEAT),
     )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
     return True
+
+
+async def async_reload_entry(hass: HomeAssistant, entry: GuardSwitchConfigEntry) -> None:
+    """Reload config entry."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

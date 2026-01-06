@@ -29,7 +29,6 @@ from .const import (
     CONF_ALLOWED_WEATHER,
     CONF_CLIMATE_ENTITY,
     CONF_DEVICE_TYPE,
-    CONF_HEARTBEAT_ENABLED,
     CONF_SUN_ENTITY,
     CONF_TARGET_ENTITY,
     CONF_WEATHER_ENTITY,
@@ -56,7 +55,8 @@ class ClimateGuardSwitch(SwitchEntity, RestoreEntity):
         """Initialize the switch."""
         self.hass = hass
         self._config_entry = config_entry
-        self._config = config_entry.data
+        # Options take precedence over data
+        self._config = {**config_entry.data, **config_entry.options}
         self._attr_has_entity_name = True
         self._attr_name = None # Use device name as prefix
         self._attr_unique_id = config_entry.entry_id
@@ -240,8 +240,8 @@ class ClimateGuardSwitch(SwitchEntity, RestoreEntity):
         self._cooldown_bypass = False # Reset just in case
         self.async_write_ha_state() # Optimistic update
 
-        # Start Heartbeat if enabled
-        if self._config.get(CONF_HEARTBEAT_ENABLED, True):
+        # Start Heartbeat if enabled (interval > 0)
+        if self._heartbeat_interval.total_seconds() > 0:
             _LOGGER.debug("%s: Starting heartbeat loop.", self.name)
             self._start_heartbeat()
         

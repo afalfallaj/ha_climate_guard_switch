@@ -8,7 +8,6 @@ CONF_WEATHER_ENTITY = "weather_entity"
 CONF_RUN_LIMIT = "run_limit_minutes"
 CONF_COOLDOWN = "cooldown_minutes"
 CONF_HEARTBEAT = "heartbeat_interval_seconds"
-CONF_HEARTBEAT_ENABLED = "heartbeat_enabled"
 CONF_CLIMATE_ENTITY = "climate_entity"
 
 CONF_DEVICE_TYPE = "device_type"

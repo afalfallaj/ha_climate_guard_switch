@@ -11,7 +11,7 @@
           "weather_entity": "Weather Entity (Optional Check)",
           "climate_entity": "Linked Thermostat (For Manual Override)",
           "allowed_weather_states": "Allowed Weather States (Empty = All)",
-          "heartbeat_enabled": "Enable Heartbeat (Dead Man's Switch)"
+          "heartbeat_interval_seconds": "Heartbeat Interval (Seconds)"
         }
       }
     },
