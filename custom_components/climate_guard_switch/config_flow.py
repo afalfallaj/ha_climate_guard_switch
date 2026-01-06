@@ -41,7 +41,6 @@ def _get_config_schema(defaults: dict[str, Any] | None = None, is_options: bool 
         selector.EntitySelectorConfig(domain="switch")
     )
     
-    # Device Type (Only show in initial setup, changing it later is confusing for ID)
     if not is_options:
         schema[vol.Required(
             CONF_DEVICE_TYPE,
@@ -106,8 +105,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Handle the initial step."""
         if user_input is not None:
-            # Use a simple, clean title for the Entry. 
-            # This becomes the Device Name, and thus the Entity ID (switch.heater_guard).
             type_name = user_input[CONF_DEVICE_TYPE].title() # Heater or Cooler
             title = f"{type_name} Guard"
             return self.async_create_entry(title=title, data=user_input)
