@@ -67,10 +67,11 @@ class GuardSwitchNumber(RestoreNumber):
         self._key = key
         self._attr_translation_key = translation_key
         self._attr_has_entity_name = True
-        self._attr_unique_id = f"{config_entry.entry_id}_{key}"        
+        self._attr_unique_id = config_entry.entry_id      
         self._attr_native_unit_of_measurement = unit_of_measurement
         self._attr_native_min_value = min_value
         self._attr_native_max_value = max_value
+        self._attr_native_step = 1
         self._attr_mode = NumberMode.BOX
         
         self._attr_device_info = DeviceInfo(
