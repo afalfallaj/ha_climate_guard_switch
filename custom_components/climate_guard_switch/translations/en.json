@@ -1,0 +1,41 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Create Climate Guard Switch",
+        "description": "Configure a filtered proxy switch for your climate heater/cooler.",
+        "data": {
+          "target_entity": "Target Switch Entity (Hardware)",
+          "device_type": "Device Type (Heater/Cooler)",
+          "sun_entity": "Sun Entity (Optional Check)",
+          "weather_entity": "Weather Entity (Optional Check)",
+          "climate_entity": "Linked Thermostat (For Manual Override)",
+          "allowed_weather_states": "Allowed Weather States (Empty = All)",
+          "run_limit_minutes": "Run Limit (Minutes)",
+          "cooldown_minutes": "Cooldown (Minutes)",
+          "heartbeat_interval_seconds": "Heartbeat Interval (Seconds)",
+          "heartbeat_enabled": "Enable Heartbeat (Dead Man's Switch)"
+        }
+      }
+    },
+    "error": {
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "Device is already configured"
+    }
+  },
+  "entity": {
+    "number": {
+      "run_limit": {
+        "name": "Run limit"
+      },
+      "cooldown": {
+        "name": "Cooldown"
+      },
+      "heartbeat": {
+        "name": "Heartbeat interval"
+      }
+    }
+  }
+}

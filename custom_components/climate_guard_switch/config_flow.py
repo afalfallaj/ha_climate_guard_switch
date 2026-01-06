@@ -1,0 +1,90 @@
+"""Config flow for Climate Guard Switch integration."""
+from __future__ import annotations
+
+from typing import Any
+
+import voluptuous as vol
+
+from homeassistant import config_entries
+from homeassistant.core import callback
+from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers import selector
+import homeassistant.helpers.config_validation as cv
+
+from .const import (
+    CONF_ALLOWED_WEATHER,
+    CONF_CLIMATE_ENTITY,
+    CONF_COOLDOWN,
+    CONF_DEVICE_TYPE,
+    CONF_HEARTBEAT,
+    CONF_HEARTBEAT_ENABLED,
+    CONF_RUN_LIMIT,
+    CONF_SUN_ENTITY,
+    CONF_TARGET_ENTITY,
+    CONF_WEATHER_ENTITY,
+    DEFAULT_COOLDOWN,
+    DEFAULT_HEARTBEAT,
+    DEFAULT_RUN_LIMIT,
+    DEVICE_TYPE_COOLER,
+    DEVICE_TYPE_HEATER,
+    DOMAIN,
+    WEATHER_STATES,
+)
+
+
+class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for Climate Guard Switch."""
+
+    VERSION = 1
+
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle the initial step."""
+        if user_input is not None:
+            # Use the target entity name as the default title
+            title = f"{user_input[CONF_DEVICE_TYPE].title()} ({user_input[CONF_TARGET_ENTITY]})"
+            return self.async_create_entry(title=title, data=user_input)
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_TARGET_ENTITY): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="switch")
+                    ),
+                    vol.Required(CONF_DEVICE_TYPE): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[DEVICE_TYPE_HEATER, DEVICE_TYPE_COOLER],
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    vol.Optional(CONF_SUN_ENTITY): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="sun")
+                    ),
+                    vol.Optional(CONF_WEATHER_ENTITY): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="weather")
+                    ),
+                    vol.Optional(CONF_CLIMATE_ENTITY): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="climate")
+                    ),
+                    vol.Optional(CONF_ALLOWED_WEATHER): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=WEATHER_STATES,
+                            multiple=True,
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_RUN_LIMIT, default=DEFAULT_RUN_LIMIT
+                    ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                    vol.Optional(
+                        CONF_COOLDOWN, default=DEFAULT_COOLDOWN
+                    ): vol.All(vol.Coerce(int), vol.Range(min=0)),
+                    vol.Optional(
+                        CONF_HEARTBEAT, default=DEFAULT_HEARTBEAT
+                    ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                    vol.Optional(CONF_HEARTBEAT_ENABLED, default=True): bool,
+                }
+            ),
+        )
