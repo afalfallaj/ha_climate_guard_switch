@@ -67,7 +67,7 @@ class GuardSwitchNumber(RestoreNumber):
         self._key = key
         self._attr_translation_key = translation_key
         self._attr_has_entity_name = True
-        self._attr_unique_id = config_entry.entry_id      
+        self._attr_unique_id = f"{config_entry.entry_id}_{key}"        
         self._attr_native_unit_of_measurement = unit_of_measurement
         self._attr_native_min_value = min_value
         self._attr_native_max_value = max_value
@@ -97,6 +97,6 @@ class GuardSwitchNumber(RestoreNumber):
         new_options[self._key] = int(value)
         
         # This will trigger reload of the entry
-        await self.hass.config_entries.async_update_entry(
+        self.hass.config_entries.async_update_entry(
             self._config_entry, options=new_options
         )
