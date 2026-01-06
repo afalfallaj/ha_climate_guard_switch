@@ -134,9 +134,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     ) -> FlowResult:
         """Manage the options."""
         if user_input is not None:
+            for key in [CONF_SUN_ENTITY, CONF_WEATHER_ENTITY, CONF_CLIMATE_ENTITY, CONF_ALLOWED_WEATHER]:
+                if key not in user_input:
+                    user_input[key] = None
+
             return self.async_create_entry(title="", data=user_input)
 
-        # Merge defaults from data (original config) and options (previous edits)
         current_config = {**self._config_entry.data, **self._config_entry.options}
 
         return self.async_show_form(
