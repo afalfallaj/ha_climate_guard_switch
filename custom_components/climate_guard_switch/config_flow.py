@@ -14,17 +14,11 @@ import homeassistant.helpers.config_validation as cv
 from .const import (
     CONF_ALLOWED_WEATHER,
     CONF_CLIMATE_ENTITY,
-    CONF_COOLDOWN,
     CONF_DEVICE_TYPE,
-    CONF_HEARTBEAT,
     CONF_HEARTBEAT_ENABLED,
-    CONF_RUN_LIMIT,
     CONF_SUN_ENTITY,
     CONF_TARGET_ENTITY,
     CONF_WEATHER_ENTITY,
-    DEFAULT_COOLDOWN,
-    DEFAULT_HEARTBEAT,
-    DEFAULT_RUN_LIMIT,
     DEVICE_TYPE_COOLER,
     DEVICE_TYPE_HEATER,
     DOMAIN,
@@ -42,8 +36,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Handle the initial step."""
         if user_input is not None:
-            # Use the target entity name as the default title
-            title = f"{user_input[CONF_DEVICE_TYPE].title()} ({user_input[CONF_TARGET_ENTITY]})"
+            # Use a simple, clean title for the Entry. 
+            # This becomes the Device Name, and thus the Entity ID (switch.heater_guard).
+            type_name = user_input[CONF_DEVICE_TYPE].title() # Heater or Cooler
+            title = f"{type_name} Guard"
             return self.async_create_entry(title=title, data=user_input)
 
         return self.async_show_form(
@@ -75,15 +71,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             mode=selector.SelectSelectorMode.DROPDOWN,
                         )
                     ),
-                    vol.Optional(
-                        CONF_RUN_LIMIT, default=DEFAULT_RUN_LIMIT
-                    ): vol.All(vol.Coerce(int), vol.Range(min=1)),
-                    vol.Optional(
-                        CONF_COOLDOWN, default=DEFAULT_COOLDOWN
-                    ): vol.All(vol.Coerce(int), vol.Range(min=0)),
-                    vol.Optional(
-                        CONF_HEARTBEAT, default=DEFAULT_HEARTBEAT
-                    ): vol.All(vol.Coerce(int), vol.Range(min=1)),
                     vol.Optional(CONF_HEARTBEAT_ENABLED, default=True): bool,
                 }
             ),
