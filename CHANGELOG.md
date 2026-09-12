@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v0.0.2] - 2026-09-12
+
+### Bug Fixes
+* fix: update integration type from helper to device in manifest
+
 ## [v0.0.1] - 2026-09-12
 
 ### Features
