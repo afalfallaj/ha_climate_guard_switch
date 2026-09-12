@@ -13,7 +13,7 @@ from homeassistant.const import (
     SERVICE_TURN_ON,
     STATE_ON,
 )
-from homeassistant.core import Event, HomeAssistant, State, callback
+from homeassistant.core import Event, HomeAssistant, State
 from homeassistant.helpers.event import async_track_state_change_event, async_track_time_interval
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
@@ -46,10 +46,10 @@ class ClimateGuardCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         super().__init__(
             hass,
             _LOGGER,
+            config_entry=config_entry,
             name=DOMAIN,
             update_interval=None, # Driven by events, not polling
         )
-        self.config_entry = config_entry
         self._config = {**config_entry.data, **config_entry.options}
         
         # Identity
@@ -73,12 +73,15 @@ class ClimateGuardCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._cooldown_bypass: bool = False
         self._block_reason: str | None = None
         
-        # Initial Data
+        # Initial Data — same shape as _update_data()'s dict, so a read before
+        # the first _async_check_and_update() completes can't KeyError.
         self.data = {
             "guard_enabled": False,
             "target_active": False,
             "status": "Initializing",
-            "reason": None
+            "reason": None,
+            "cooldown_active": False,
+            "last_run": None,
         }
 
     async def async_init(self):
@@ -110,7 +113,11 @@ class ClimateGuardCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._guard_enabled = enabled
         if last_run:
             self._last_run_time = last_run
-        
+
+        # Reflect immediately so a caller's subsequent async_write_ha_state()
+        # doesn't read the stale value before the full check below finishes.
+        self.data["guard_enabled"] = enabled
+
         # Trigger update
         self.hass.async_create_task(self._async_check_and_update())
 
@@ -133,7 +140,6 @@ class ClimateGuardCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         seconds = self.config_entry.options.get(CONF_HEARTBEAT, self._config.get(CONF_HEARTBEAT, DEFAULT_HEARTBEAT))
         return timedelta(seconds=seconds)
 
-    @callback
     async def _on_dependency_change(self, event: Event) -> None:
         """Handle state changes in dependencies."""
         entity_id = event.data.get("entity_id")

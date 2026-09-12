@@ -6,8 +6,8 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant import config_entries
+from homeassistant.config_entries import ConfigFlowResult, OptionsFlowWithReload
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
 import homeassistant.helpers.config_validation as cv
 
@@ -97,13 +97,16 @@ def _get_config_schema(defaults: dict[str, Any] | None = None, is_options: bool 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Climate Guard Switch."""
 
-    VERSION = 1
+    VERSION = 2
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle the initial step."""
         if user_input is not None:
+            await self.async_set_unique_id(user_input[CONF_TARGET_ENTITY])
+            self._abort_if_unique_id_configured()
+
             type_name = user_input[CONF_DEVICE_TYPE].title() # Heater or Cooler
             title = f"{type_name} Guard"
             return self.async_create_entry(title=title, data=user_input)
@@ -112,35 +115,65 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=_get_config_schema(),
         )
-    
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Let the user change the device type without re-adding the integration.
+
+        Everything else (target entity, gates, heartbeat) is already editable via
+        the options flow; `device_type` is the only field fixed at creation time.
+        """
+        reconfigure_entry = self._get_reconfigure_entry()
+
+        if user_input is not None:
+            type_name = user_input[CONF_DEVICE_TYPE].title()  # Heater or Cooler
+            return self.async_update_reload_and_abort(
+                reconfigure_entry,
+                title=f"{type_name} Guard",
+                data_updates=user_input,
+            )
+
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_DEVICE_TYPE,
+                    default=reconfigure_entry.data.get(CONF_DEVICE_TYPE, DEVICE_TYPE_HEATER),
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[DEVICE_TYPE_HEATER, DEVICE_TYPE_COOLER],
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+            }
+        )
+        return self.async_show_form(step_id="reconfigure", data_schema=schema)
+
     @staticmethod
     @callback
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
     ) -> config_entries.OptionsFlow:
         """Create the options flow."""
-        return OptionsFlowHandler(config_entry)
+        return OptionsFlowHandler()
 
 
-class OptionsFlowHandler(config_entries.OptionsFlow):
+class OptionsFlowHandler(OptionsFlowWithReload):
     """Climate Guard Switch options flow."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
-        self._config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Manage the options."""
         if user_input is not None:
             for key in [CONF_SUN_ENTITY, CONF_WEATHER_ENTITY, CONF_CLIMATE_ENTITY, CONF_ALLOWED_WEATHER]:
                 if key not in user_input:
                     user_input[key] = None
 
-            return self.async_create_entry(title="", data=user_input)
+            options = {**self.config_entry.options, **user_input}
+            return self.async_create_entry(title="", data=options)
 
-        current_config = {**self._config_entry.data, **self._config_entry.options}
+        current_config = {**self.config_entry.data, **self.config_entry.options}
 
         return self.async_show_form(
             step_id="init",

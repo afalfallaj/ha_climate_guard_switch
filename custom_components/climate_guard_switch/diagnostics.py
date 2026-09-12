@@ -28,7 +28,21 @@ async def async_get_config_entry_diagnostics(
     # Merge config and options to show effective config
     effective_config = {**entry.data, **entry.options}
     config_data = async_redact_data(effective_config, TO_REDACT)
-    runtime_data = vars(entry.runtime_data) if entry.runtime_data else None
+
+    coordinator = entry.runtime_data
+    runtime_data = None
+    if coordinator:
+        last_run = coordinator.data.get("last_run")
+        runtime_data = {
+            "guard_enabled": coordinator.data.get("guard_enabled"),
+            "target_active": coordinator.data.get("target_active"),
+            "status": coordinator.data.get("status"),
+            "reason": coordinator.data.get("reason"),
+            "cooldown_active": coordinator.data.get("cooldown_active"),
+            "last_run": last_run.isoformat() if last_run else None,
+            "run_limit_minutes": coordinator.run_limit.total_seconds() / 60,
+            "cooldown_minutes": coordinator.cooldown.total_seconds() / 60,
+        }
 
     # Snapshot of related entities
     related_states = {

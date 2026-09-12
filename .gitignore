@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 *.manifest
 .DS_Store
+.pytest_cache/
 
 # Environments
 .env

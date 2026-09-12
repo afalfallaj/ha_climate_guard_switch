@@ -60,4 +60,4 @@ climate:
 
 ## Disclaimer
 
-*USE AT YOUR OWN RISK* This project is a personal hobby project provided for experimental purposes only. 
+*USE AT YOUR OWN RISK* This project is a personal hobby project provided for experimental purposes only. Its code is written and maintained with AI assistance rather than by hand line-by-line; it's reviewed before merging, but you should still read the source and test thoroughly in your own environment before controlling real heating/cooling hardware with it.

@@ -13,6 +13,13 @@
           "allowed_weather_states": "Allowed Weather States (Empty = All)",
           "heartbeat_interval_seconds": "Heartbeat Interval (Seconds)"
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Climate Guard Switch",
+        "description": "Change the device type. Target entity, gates, and heartbeat are configured via Options instead.",
+        "data": {
+          "device_type": "Device Type (Heater/Cooler)"
+        }
       }
     },
     "error": {
