@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v0.0.3] - 2026-09-14
+
+### Features
+* feat: enhance functionality with run limit and cooldown features, including heartbeat management and diagnostics updates
+
 ## [v0.0.2] - 2026-09-12
 
 ### Bug Fixes
