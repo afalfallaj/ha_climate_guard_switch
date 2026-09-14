@@ -12,6 +12,13 @@
           "climate_entity": "Linked Thermostat (For Manual Override)",
           "allowed_weather_states": "Allowed Weather States (Empty = All)",
           "heartbeat_interval_seconds": "Heartbeat Interval (Seconds)"
+        },
+        "data_description": {
+          "sun_entity": "Optional. When set, the target only runs while the sun is above the horizon.",
+          "weather_entity": "Optional. Pairs with Allowed Weather States below to gate the target on current weather.",
+          "climate_entity": "Optional. Linking a thermostat lets a manual temperature change bypass an active cooldown once.",
+          "allowed_weather_states": "Only used when a Weather Entity is set above. Leave empty to allow any weather.",
+          "heartbeat_interval_seconds": "How often the running switch is re-pulsed (keeps the hardware's own auto-off timer refreshed) and how often the Run Limit cutoff is checked. Set to 0 to disable both — including Run Limit enforcement, even if Run Limit itself is set above 0."
         }
       },
       "reconfigure": {
@@ -41,6 +48,13 @@
           "climate_entity": "Linked Thermostat (For Manual Override)",
           "allowed_weather_states": "Allowed Weather States (Empty = All)",
           "heartbeat_interval_seconds": "Heartbeat Interval (Seconds)"
+        },
+        "data_description": {
+          "sun_entity": "Optional. When set, the target only runs while the sun is above the horizon.",
+          "weather_entity": "Optional. Pairs with Allowed Weather States below to gate the target on current weather.",
+          "climate_entity": "Optional. Linking a thermostat lets a manual temperature change bypass an active cooldown once.",
+          "allowed_weather_states": "Only used when a Weather Entity is set above. Leave empty to allow any weather.",
+          "heartbeat_interval_seconds": "How often the running switch is re-pulsed (keeps the hardware's own auto-off timer refreshed) and how often the Run Limit cutoff is checked. Set to 0 to disable both — including Run Limit enforcement, even if Run Limit itself is set above 0."
         }
       }
     }

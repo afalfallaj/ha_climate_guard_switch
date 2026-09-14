@@ -16,6 +16,7 @@ from custom_components.climate_guard_switch.const import (
     CONF_ALLOWED_WEATHER,
     CONF_CLIMATE_ENTITY,
     CONF_COOLDOWN,
+    CONF_HEARTBEAT,
     CONF_RUN_LIMIT,
     CONF_SUN_ENTITY,
     CONF_TARGET_ENTITY,
@@ -153,6 +154,32 @@ def test_run_limit_and_cooldown_read_live_from_options_without_reload() -> None:
 
     assert coordinator.run_limit == timedelta(minutes=25)
     assert coordinator.cooldown == timedelta(minutes=5)
+
+
+def test_update_data_reports_enabled_flags() -> None:
+    coordinator = _make_coordinator(**{CONF_RUN_LIMIT: 10, CONF_COOLDOWN: 40})
+    coordinator._update_data()
+    assert coordinator.data["cooldown_enabled"] is True
+    assert coordinator.data["run_limit_enabled"] is True
+    assert coordinator.data["run_limit_enforced"] is True  # default heartbeat > 0
+
+
+def test_update_data_disabled_flags_when_zero() -> None:
+    coordinator = _make_coordinator(**{CONF_RUN_LIMIT: 0, CONF_COOLDOWN: 0})
+    coordinator._update_data()
+    assert coordinator.data["cooldown_enabled"] is False
+    assert coordinator.data["run_limit_enabled"] is False
+    assert coordinator.data["run_limit_enforced"] is False
+
+
+def test_update_data_run_limit_not_enforced_when_heartbeat_disabled() -> None:
+    """Regression: run-limit enforcement lives inside the heartbeat tick, so
+    heartbeat=0 silently disables it even with run_limit > 0."""
+    coordinator = _make_coordinator(**{CONF_RUN_LIMIT: 10, CONF_HEARTBEAT: 0})
+    coordinator._update_data()
+    assert coordinator.data["run_limit_enabled"] is True
+    assert coordinator.data["run_limit_enforced"] is False
+    assert "not enforced" in coordinator.data["status"].lower()
 
 
 async def test_set_guard_state_updates_data_synchronously() -> None:

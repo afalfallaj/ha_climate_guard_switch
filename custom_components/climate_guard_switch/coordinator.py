@@ -82,6 +82,9 @@ class ClimateGuardCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "reason": None,
             "cooldown_active": False,
             "last_run": None,
+            "cooldown_enabled": False,
+            "run_limit_enabled": False,
+            "run_limit_enforced": False,
         }
 
     async def async_init(self):
@@ -218,7 +221,14 @@ class ClimateGuardCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _update_data(self):
         """Update subscribers."""
+        cooldown_enabled = self.cooldown.total_seconds() > 0
+        run_limit_enabled = self.run_limit.total_seconds() > 0
+        run_limit_enforced = run_limit_enabled and self.heartbeat_interval.total_seconds() > 0
+
         status = "Active (Running)" if self._target_is_active else f"Idle ({self._block_reason or 'Off'})"
+        if run_limit_enabled and not run_limit_enforced:
+            status += " — Run Limit set but not enforced (Heartbeat is 0)"
+
         self.async_set_updated_data({
             "guard_enabled": self._guard_enabled,
             "target_active": self._target_is_active,
@@ -226,6 +236,9 @@ class ClimateGuardCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "reason": self._block_reason,
             "cooldown_active": self._is_cooldown_active(),
             "last_run": self._last_run_time,
+            "cooldown_enabled": cooldown_enabled,
+            "run_limit_enabled": run_limit_enabled,
+            "run_limit_enforced": run_limit_enforced,
         })
 
     async def _start_target(self):

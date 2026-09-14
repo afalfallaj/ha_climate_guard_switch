@@ -5,9 +5,9 @@ A custom Home Assistant integration acting as a "Smart Proxy" for your climate h
 ## Features
 
 - **🛡️ Safety & Protection**:
-  - **Run Limits**: Automatically turns off the device after X minutes to prevent overheating or waste.
-  - **Cooldowns**: Enforces a rest period between runs to protect equipment (compressors) and prevent short-cycling.
-  - **Dead Man's Switch (Heartbeat)**: Periodically pulses the hardware switch. If Home Assistant crashes, the hardware's own auto-off timer takes over (requires hardware config).
+  - **Run Limits**: Automatically turns off the device after X minutes to prevent overheating or waste. Set to **0 to disable** — the guard will then never force a stop on its own, and only turns the device off when your thermostat does.
+  - **Cooldowns**: Enforces a rest period between runs to protect equipment (compressors) and prevent short-cycling. Set to **0 to disable** — cycling speed is then entirely controlled by your thermostat's own hysteresis/`min_cycle_duration` (this is a normal setup if the thermostat already limits short-cycling and you just want the other safety layers).
+  - **Dead Man's Switch (Heartbeat)**: While the device is running, periodically re-sends `turn_on` to the hardware switch (every `heartbeat_interval_seconds`, default 10s). This is what keeps a Shelly/relay's own built-in auto-off timer from ever tripping during normal operation — it's continuously refreshed. The hardware auto-off is only meant to be a backstop for if Home Assistant itself crashes: once HA stops, the pulses stop, and the hardware's own timer becomes the real safety net (requires that auto-off to be configured on the device itself). **This also gates Run Limit**: the run-limit cutoff is checked on each heartbeat tick, so setting Heartbeat to 0 disables Run Limit enforcement too, even if Run Limit itself is set above 0. The Status sensor will call this out in its state text if it applies to your setup.
 
 - **☀️ Environmental Gates**:
   - **Sun Check**: Only run when the sun is up (configurable).

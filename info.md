@@ -4,8 +4,8 @@ A "smart proxy" for your climate heater/cooler switch — adds run limits, coold
 
 ### What it does:
 - Wraps an existing hardware `switch.*` entity, so it stays a drop-in `heater`/`cooler` for `generic_thermostat` or `dual_smart_thermostat`
-- Enforces a maximum run time and a rest period between runs, to protect equipment
-- Periodically re-pulses the hardware switch while running, so the device's own auto-off timer keeps working as a fallback if Home Assistant goes down
+- Enforces a maximum run time and a rest period between runs, to protect equipment (set either to 0 to disable it and rely on your thermostat's own cycling instead)
+- Periodically re-pulses the hardware switch while running — this keeps the device's own built-in auto-off timer from tripping during normal use; that timer only becomes the active safety net if Home Assistant itself goes down and the pulses stop
 - Optionally only runs when the sun is up, the weather matches an allow-list, or gates on a linked thermostat
 - Run limit / cooldown are adjustable instantly from number sliders, no restart needed
 

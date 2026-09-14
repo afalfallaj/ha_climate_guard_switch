@@ -42,6 +42,10 @@ async def async_get_config_entry_diagnostics(
             "last_run": last_run.isoformat() if last_run else None,
             "run_limit_minutes": coordinator.run_limit.total_seconds() / 60,
             "cooldown_minutes": coordinator.cooldown.total_seconds() / 60,
+            "heartbeat_interval_seconds": coordinator.heartbeat_interval.total_seconds(),
+            "cooldown_enabled": coordinator.data.get("cooldown_enabled"),
+            "run_limit_enabled": coordinator.data.get("run_limit_enabled"),
+            "run_limit_enforced": coordinator.data.get("run_limit_enforced"),
         }
 
     # Snapshot of related entities

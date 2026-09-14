@@ -53,4 +53,7 @@ class GuardStatusSensor(CoordinatorEntity[ClimateGuardCoordinator], SensorEntity
             "reason": data.get("reason"),
             "cooldown_active": data.get("cooldown_active"),
             "last_run": data.get("last_run").isoformat() if data.get("last_run") else None,
+            "cooldown_enabled": data.get("cooldown_enabled"),
+            "run_limit_enabled": data.get("run_limit_enabled"),
+            "run_limit_enforced": data.get("run_limit_enforced"),
         }
