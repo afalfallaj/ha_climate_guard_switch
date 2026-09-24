@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v0.0.6] - 2026-09-24
+
+### Refactoring
+* Refactor history view functionality
+
 ## [v0.0.5] - 2026-09-24
 
 * Enhance Climate Guard Switch Integration
