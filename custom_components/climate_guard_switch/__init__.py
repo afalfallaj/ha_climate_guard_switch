@@ -11,8 +11,10 @@ from .coordinator import ClimateGuardCoordinator
 from .const import (
     CONF_TARGET_ENTITY,
     DOMAIN,
+    HISTORY_PLATFORMS,
     PLATFORMS,
 )
+from .history import is_history_entry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -21,10 +23,16 @@ type GuardSwitchConfigEntry = ConfigEntry[ClimateGuardCoordinator]
 
 async def async_setup_entry(hass: HomeAssistant, entry: GuardSwitchConfigEntry) -> bool:
     """Set up Climate Guard Switch from a config entry."""
-    
+
+    if is_history_entry(entry):
+        # A History view is a read-only mirror of other entities: no coordinator,
+        # no runtime_data and no target switch, so none of the guard setup applies.
+        await hass.config_entries.async_forward_entry_setups(entry, HISTORY_PLATFORMS)
+        return True
+
     coordinator = ClimateGuardCoordinator(hass, entry)
     await coordinator.async_init()
-    
+
     entry.runtime_data = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -33,6 +41,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: GuardSwitchConfigEntry) 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    if is_history_entry(entry):
+        return await hass.config_entries.async_unload_platforms(entry, HISTORY_PLATFORMS)
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 

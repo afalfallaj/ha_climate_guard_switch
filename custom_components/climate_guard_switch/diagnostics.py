@@ -8,7 +8,16 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from . import GuardSwitchConfigEntry
-from .const import CONF_CLIMATE_ENTITY, CONF_SUN_ENTITY, CONF_TARGET_ENTITY, CONF_WEATHER_ENTITY
+from .const import (
+    CONF_CLIMATE_ENTITY,
+    CONF_COOLING_ENTITY,
+    CONF_HEATING_ENTITY,
+    CONF_SUN_ENTITY,
+    CONF_TARGET_ENTITY,
+    CONF_TEMPERATURE_SENSOR,
+    CONF_WEATHER_ENTITY,
+)
+from .history import history_config, is_history_entry
 
 TO_REDACT = {CONF_TARGET_ENTITY, "unique_id"}
 
@@ -24,6 +33,20 @@ async def async_get_config_entry_diagnostics(
         if state := hass.states.get(entity_id):
             return state.as_dict()
         return {"state": "unknown", "entity_id": entity_id}
+
+    if is_history_entry(entry):
+        # A History view has no coordinator: just its config and the live state
+        # of the entities it mirrors.
+        history = history_config(entry)
+        return {
+            "config": async_redact_data(history, TO_REDACT),
+            "related_entities": {
+                "temperature_sensor": _get_state(history.get(CONF_TEMPERATURE_SENSOR)),
+                "thermostat": _get_state(history.get(CONF_CLIMATE_ENTITY)),
+                "heating": _get_state(history.get(CONF_HEATING_ENTITY)),
+                "cooling": _get_state(history.get(CONF_COOLING_ENTITY)),
+            },
+        }
 
     # Merge config and options to show effective config
     effective_config = {**entry.data, **entry.options}

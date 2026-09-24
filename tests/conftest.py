@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as _dt
+import enum
 import pathlib
 import sys
 from typing import Any, Generic, TypeVar
@@ -29,6 +30,9 @@ class _State:
     def __init__(self, state: str, attributes: dict[str, Any] | None = None) -> None:
         self.state = state
         self.attributes = attributes or {}
+
+    def as_dict(self) -> dict[str, Any]:
+        return {"state": self.state, "attributes": dict(self.attributes)}
 
 
 class _StateMachine:
@@ -52,6 +56,8 @@ class _HomeAssistant:
         self.services = MagicMock()
         self.services.async_call = AsyncMock()
         self.config_entries = MagicMock()
+        self.config = MagicMock()
+        self.config.units.temperature_unit = "°C"
         self._tasks: list[asyncio.Task] = []
 
     def async_create_task(self, coro):
@@ -75,14 +81,183 @@ _ha_const.ATTR_ENTITY_ID = "entity_id"
 _ha_const.SERVICE_TURN_OFF = "turn_off"
 _ha_const.SERVICE_TURN_ON = "turn_on"
 _ha_const.STATE_ON = "on"
+_ha_const.STATE_UNAVAILABLE = "unavailable"
+_ha_const.STATE_UNKNOWN = "unknown"
+_ha_const.ATTR_TEMPERATURE = "temperature"
+_ha_const.ATTR_UNIT_OF_MEASUREMENT = "unit_of_measurement"
+_ha_const.CONF_NAME = "name"
+_ha_const.PERCENTAGE = "%"
+_ha_const.PRECISION_TENTHS = 0.1
 _ha_const.Platform = MagicMock()
+
+
+class UnitOfTemperature(enum.StrEnum):
+    """Stand-in for homeassistant.const.UnitOfTemperature."""
+
+    CELSIUS = "°C"
+    FAHRENHEIT = "°F"
+    KELVIN = "K"
+
+
+_ha_const.UnitOfTemperature = UnitOfTemperature
+
+# ---------------------------------------------------------------------------
+# homeassistant.exceptions / util.unit_conversion — a real C/F/K converter that
+# raises like the real one for units it doesn't know, so read_temperature's
+# error handling is exercised for real.
+# ---------------------------------------------------------------------------
+
+
+class HomeAssistantError(Exception):
+    """Stand-in for homeassistant.exceptions.HomeAssistantError."""
+
+
+_ha_exceptions = MagicMock()
+_ha_exceptions.HomeAssistantError = HomeAssistantError
+
+
+class _TemperatureConverter:
+    """Stand-in for homeassistant.util.unit_conversion.TemperatureConverter."""
+
+    _TO_CELSIUS = {
+        "°C": lambda v: v,
+        "°F": lambda v: (v - 32) / 1.8,
+        "K": lambda v: v - 273.15,
+    }
+    _FROM_CELSIUS = {
+        "°C": lambda v: v,
+        "°F": lambda v: v * 1.8 + 32,
+        "K": lambda v: v + 273.15,
+    }
+
+    @classmethod
+    def convert(cls, value: float, from_unit: str | None, to_unit: str | None) -> float:
+        if from_unit == to_unit:
+            return value
+        if from_unit not in cls._TO_CELSIUS or to_unit not in cls._FROM_CELSIUS:
+            raise HomeAssistantError(f"{from_unit!r} is not a recognized temperature unit")
+        return cls._FROM_CELSIUS[to_unit](cls._TO_CELSIUS[from_unit](value))
+
+
+_ha_util_unit_conversion = MagicMock()
+_ha_util_unit_conversion.TemperatureConverter = _TemperatureConverter
+
+# ---------------------------------------------------------------------------
+# Entity base classes — minimal stand-ins for homeassistant.helpers.entity.Entity
+# (and the climate/sensor subclasses): just enough for the history entities to
+# run, recording state writes and removal callbacks so tests can assert on them.
+# ---------------------------------------------------------------------------
+
+
+class _Entity:
+    hass: Any = None
+    state_writes = 0
+
+    async def async_added_to_hass(self) -> None:
+        return None
+
+    def async_write_ha_state(self) -> None:
+        self.state_writes += 1
+
+    def async_on_remove(self, func) -> None:
+        self.__dict__.setdefault("removers", []).append(func)
+
 
 # ---------------------------------------------------------------------------
 # homeassistant.components.climate
 # ---------------------------------------------------------------------------
 
+
+class HVACMode(enum.StrEnum):
+    OFF = "off"
+    HEAT = "heat"
+    COOL = "cool"
+    HEAT_COOL = "heat_cool"
+    AUTO = "auto"
+    DRY = "dry"
+    FAN_ONLY = "fan_only"
+
+
+class HVACAction(enum.StrEnum):
+    COOLING = "cooling"
+    DEFROSTING = "defrosting"
+    DRYING = "drying"
+    FAN = "fan"
+    HEATING = "heating"
+    IDLE = "idle"
+    OFF = "off"
+    PREHEATING = "preheating"
+
+
+class ClimateEntityFeature(enum.IntFlag):
+    TARGET_TEMPERATURE = 1
+    TARGET_TEMPERATURE_RANGE = 2
+    TARGET_HUMIDITY = 4
+    FAN_MODE = 8
+    PRESET_MODE = 16
+    SWING_MODE = 32
+    TURN_OFF = 128
+    TURN_ON = 256
+    SWING_HORIZONTAL_MODE = 512
+
+
+class ClimateEntity(_Entity):
+    """Stand-in for homeassistant.components.climate.ClimateEntity."""
+
+    # The real defaults (7-35 °C) that a subclass gets unless it overrides them.
+    @property
+    def min_temp(self) -> float:
+        return 7.0
+
+    @property
+    def max_temp(self) -> float:
+        return 35.0
+
+
 _ha_components_climate = MagicMock()
 _ha_components_climate.ATTR_TEMPERATURE = "temperature"
+_ha_components_climate.ATTR_MIN_TEMP = "min_temp"
+_ha_components_climate.ATTR_MAX_TEMP = "max_temp"
+_ha_components_climate.ATTR_HVAC_ACTION = "hvac_action"
+_ha_components_climate.ATTR_TARGET_TEMP_LOW = "target_temp_low"
+_ha_components_climate.ATTR_TARGET_TEMP_HIGH = "target_temp_high"
+_ha_components_climate.HVACMode = HVACMode
+_ha_components_climate.HVACAction = HVACAction
+_ha_components_climate.ClimateEntityFeature = ClimateEntityFeature
+_ha_components_climate.ClimateEntity = ClimateEntity
+
+# ---------------------------------------------------------------------------
+# homeassistant.components.sensor / diagnostics / helpers.device_registry /
+# helpers.entity_platform
+# ---------------------------------------------------------------------------
+
+
+class SensorDeviceClass(enum.StrEnum):
+    TEMPERATURE = "temperature"
+
+
+class SensorStateClass(enum.StrEnum):
+    MEASUREMENT = "measurement"
+
+
+class SensorEntity(_Entity):
+    """Stand-in for homeassistant.components.sensor.SensorEntity."""
+
+
+_ha_components_sensor = MagicMock()
+_ha_components_sensor.SensorEntity = SensorEntity
+_ha_components_sensor.SensorDeviceClass = SensorDeviceClass
+_ha_components_sensor.SensorStateClass = SensorStateClass
+
+_ha_components_diagnostics = MagicMock()
+_ha_components_diagnostics.async_redact_data = lambda data, to_redact: {
+    key: ("**REDACTED**" if key in to_redact else value) for key, value in data.items()
+}
+
+_ha_device_registry = MagicMock()
+_ha_device_registry.DeviceInfo = dict  # the real one is a TypedDict, i.e. a dict
+
+_ha_entity_platform = MagicMock()
 
 # ---------------------------------------------------------------------------
 # homeassistant.helpers.event — coordinator.py schedules via these, but tests
@@ -150,8 +325,19 @@ class _DataUpdateCoordinator(Generic[_T]):
         return _remove
 
 
+class _CoordinatorEntity(Generic[_T]):
+    """Minimal stand-in for homeassistant.helpers.update_coordinator.CoordinatorEntity.
+
+    Only needed so sensor.py (whose GuardStatusSensor subclasses it) can be imported.
+    """
+
+    def __init__(self, coordinator, context: Any = None) -> None:
+        self.coordinator = coordinator
+
+
 _ha_update_coordinator = MagicMock()
 _ha_update_coordinator.DataUpdateCoordinator = _DataUpdateCoordinator
+_ha_update_coordinator.CoordinatorEntity = _CoordinatorEntity
 
 # ---------------------------------------------------------------------------
 # homeassistant.config_entries — just enough of ConfigEntry/ConfigFlow/
@@ -226,6 +412,9 @@ class _FlowHandlerBase:
 
     def async_show_form(self, *, step_id, data_schema=None, errors=None):
         return {"type": "form", "step_id": step_id, "data_schema": data_schema, "errors": errors or {}}
+
+    def async_show_menu(self, *, step_id, menu_options):
+        return {"type": "menu", "step_id": step_id, "menu_options": menu_options}
 
     def async_create_entry(self, *, title=None, data=None):
         entry = _ConfigEntry(data=data, title=title, unique_id=getattr(self, "_unique_id", None))
@@ -307,6 +496,7 @@ _ha_util_dt.parse_datetime = _dt.datetime.fromisoformat
 
 _ha_util = MagicMock()
 _ha_util.dt = _ha_util_dt
+_ha_util.unit_conversion = _ha_util_unit_conversion
 
 # ---------------------------------------------------------------------------
 # Assemble sys.modules
@@ -317,18 +507,23 @@ _ha_helpers.event = _ha_event
 _ha_helpers.config_validation = _ha_cv
 _ha_helpers.selector = _ha_selector
 _ha_helpers.update_coordinator = _ha_update_coordinator
+_ha_helpers.device_registry = _ha_device_registry
+_ha_helpers.entity_platform = _ha_entity_platform
 
 _ha_top = MagicMock()
 _ha_top.config_entries = _ha_config_entries  # `from homeassistant import config_entries`
 
 _ha_components = MagicMock()
 _ha_components.climate = _ha_components_climate
+_ha_components.sensor = _ha_components_sensor
+_ha_components.diagnostics = _ha_components_diagnostics
 
 sys.modules.update(
     {
         "homeassistant": _ha_top,
         "homeassistant.core": _ha_core,
         "homeassistant.const": _ha_const,
+        "homeassistant.exceptions": _ha_exceptions,
         "homeassistant.config_entries": _ha_config_entries,
         "homeassistant.data_entry_flow": _ha_data_entry_flow,
         "homeassistant.helpers": _ha_helpers,
@@ -336,9 +531,14 @@ sys.modules.update(
         "homeassistant.helpers.config_validation": _ha_cv,
         "homeassistant.helpers.selector": _ha_selector,
         "homeassistant.helpers.update_coordinator": _ha_update_coordinator,
+        "homeassistant.helpers.device_registry": _ha_device_registry,
+        "homeassistant.helpers.entity_platform": _ha_entity_platform,
         "homeassistant.components": _ha_components,
         "homeassistant.components.climate": _ha_components_climate,
+        "homeassistant.components.sensor": _ha_components_sensor,
+        "homeassistant.components.diagnostics": _ha_components_diagnostics,
         "homeassistant.util": _ha_util,
         "homeassistant.util.dt": _ha_util_dt,
+        "homeassistant.util.unit_conversion": _ha_util_unit_conversion,
     }
 )

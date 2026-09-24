@@ -2,6 +2,14 @@
   "config": {
     "step": {
       "user": {
+        "title": "Add Climate Guard Switch",
+        "description": "What do you want to add?",
+        "menu_options": {
+          "guard": "Guard switch — protect a heater/cooler relay",
+          "history": "History view — one combined history chart (read-only)"
+        }
+      },
+      "guard": {
         "title": "Create Climate Guard Switch",
         "description": "Configure a filtered proxy switch for your climate heater/cooler.",
         "data": {
@@ -21,6 +29,24 @@
           "heartbeat_interval_seconds": "How often the running switch is re-pulsed (keeps the hardware's own auto-off timer refreshed) and how often the Run Limit cutoff is checked. Set to 0 to disable both — including Run Limit enforcement, even if Run Limit itself is set above 0."
         }
       },
+      "history": {
+        "title": "Create History view",
+        "description": "Adds a read-only device that shows a temperature, its target and the heating/cooling periods together in Home Assistant's built-in History page, where you pick your own date range. The entities can come from any integration.\n\nHistory starts when this device is added. The shaded chart keeps as much history as your recorder does (10 days by default, see `purge_keep_days`); the Target temperature, Heating and Cooling sensors are kept as long-term statistics indefinitely.",
+        "data": {
+          "name": "Name",
+          "temperature_sensor": "Temperature sensor",
+          "climate_entity": "Thermostat (For The Target Line)",
+          "heating_entity": "Heating (Relay Or Switch)",
+          "cooling_entity": "Cooling (Relay Or Switch)"
+        },
+        "data_description": {
+          "name": "Used as the device name.",
+          "temperature_sensor": "The temperature line of the chart. Heating and cooling are shaded under it, so this is required.",
+          "climate_entity": "Optional. Adds the target temperature line and follows the thermostat's mode.",
+          "heating_entity": "Optional. Shades the chart while this is on. Pick the physical relay (for example a Shelly switch) so the chart shows what actually ran, not what was requested.",
+          "cooling_entity": "Optional. Shades the chart while this is on. Pick the physical relay (for example a Shelly switch) so the chart shows what actually ran, not what was requested."
+        }
+      },
       "reconfigure": {
         "title": "Reconfigure Climate Guard Switch",
         "description": "Change the device type. Target entity, gates, and heartbeat are configured via Options instead.",
@@ -33,7 +59,8 @@
       "unknown": "Unexpected error"
     },
     "abort": {
-      "already_configured": "Device is already configured"
+      "already_configured": "Device is already configured",
+      "history_reconfigure": "History views have no device type — use Configure to change their inputs."
     }
   },
   "options": {
@@ -56,6 +83,21 @@
           "allowed_weather_states": "Only used when a Weather Entity is set above. Leave empty to allow any weather.",
           "heartbeat_interval_seconds": "How often the running switch is re-pulsed (keeps the hardware's own auto-off timer refreshed) and how often the Run Limit cutoff is checked. Set to 0 to disable both — including Run Limit enforcement, even if Run Limit itself is set above 0."
         }
+      },
+      "history": {
+        "title": "Configure History view",
+        "data": {
+          "temperature_sensor": "Temperature sensor",
+          "climate_entity": "Thermostat (For The Target Line)",
+          "heating_entity": "Heating (Relay Or Switch)",
+          "cooling_entity": "Cooling (Relay Or Switch)"
+        },
+        "data_description": {
+          "temperature_sensor": "The temperature line of the chart. Heating and cooling are shaded under it, so this is required.",
+          "climate_entity": "Optional. Adds the target temperature line and follows the thermostat's mode.",
+          "heating_entity": "Optional. Shades the chart while this is on. Pick the physical relay (for example a Shelly switch) so the chart shows what actually ran, not what was requested.",
+          "cooling_entity": "Optional. Shades the chart while this is on. Pick the physical relay (for example a Shelly switch) so the chart shows what actually ran, not what was requested."
+        }
       }
     }
   },
@@ -71,6 +113,15 @@
     "sensor": {
       "status": {
         "name": "Status"
+      },
+      "target_temperature": {
+        "name": "Target temperature"
+      },
+      "heating": {
+        "name": "Heating"
+      },
+      "cooling": {
+        "name": "Cooling"
       }
     },
     "binary_sensor": {

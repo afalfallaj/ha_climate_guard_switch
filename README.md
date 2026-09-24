@@ -35,7 +35,8 @@ A custom Home Assistant integration acting as a "Smart Proxy" for your climate h
 
 1.  Go to **Settings > Devices & Services > Add Integration**.
 2.  Search for **"Climate Guard Switch"**.
-3.  Follow the setup wizard:
+3.  Choose **Guard switch** (protects a heater/cooler relay) or **History view** (a read-only combined history chart, see [History view](#history-view-optional)).
+4.  For a guard switch, follow the setup wizard:
     - **Target Entity**: The physical switch (e.g., `switch.shelly_water_heater`).
     - **Device Type**: Heater or Cooler (affects icons).
     - **Linked Thermostat**: (Optional) For manual overrides.
@@ -57,6 +58,49 @@ climate:
     cooler: switch.climate_guard_cooler  # <--- The Proxy Switch
     target_sensor: sensor.water_tank_temp
 ```
+
+## History view (optional)
+
+Home Assistant's built-in **History** page draws one combined chart for a thermostat: the current temperature, the target temperature, and shaded heating/cooling periods. A **History view** builds that same chart from entities of *any* integration, so everything is in one place, and **each person picks their own date range** (24 hours, 7 days, a year...) without changing anything for anyone else.
+
+It is **read-only**: no controls, and it never switches anything. It is separate from the guard switch, so existing guards are unaffected, and you can add several views (for example one for the water heater and one for a room).
+
+### Set it up
+1.  **Settings > Devices & Services > Add Integration > Climate Guard Switch**, then choose **History view**.
+2.  Pick the entities. They can come from any integration, and you can change them later with **Configure**:
+    - **Temperature sensor** (required): the temperature line. Heating and cooling are shaded under it.
+    - **Thermostat** (optional): adds the target temperature line.
+    - **Heating** / **Cooling** (optional): a `switch`, `binary_sensor` or `input_boolean`. Pick the physical relay (for example a Shelly switch), so the shading shows what actually ran and not what was requested.
+
+The device gets a read-only **climate** entity (the combined chart) and, for each optional input, a sensor: **Target temperature**, **Heating** and **Cooling** (0 or 100 %).
+
+### View it
+Open **History** in the sidebar, choose the device and set any date range. The range is kept in the page address, so it is yours alone and you can bookmark it.
+
+Choosing the device also adds its sensors, which appear as extra charts under the combined one. Pick just the climate entity if you only want the combined chart, or click a name in the legend to hide it.
+
+### How far back can I go?
+Home Assistant keeps two kinds of history:
+
+| | What it is | How long |
+|---|---|---|
+| **Raw history** | Every change. Draws the shaded chart. | Only `purge_keep_days` (**10 days by default**) |
+| **Long-term statistics** | One value per hour for sensors. | **Forever** |
+
+- **Any date range** works through long-term statistics: the **Target temperature**, **Heating** and **Cooling** sensors of this device (Heating 35 % means the heating ran about 35 % of that hour). Add your temperature sensor to the History selection too if you want its temperature line for old dates (it has its own long-term statistics if it has a state class).
+- The **shaded combined chart** only reaches back as far as raw history. To keep more, raise the recorder setting in `configuration.yaml`:
+  ```yaml
+  recorder:
+    purge_keep_days: 365
+  ```
+  This applies to *every* entity, so the database grows and long ranges load more slowly. Use `recorder: exclude:` for entities you don't need history for.
+- **History starts when the device is added.** Nothing is backfilled, so a year of history exists only after a year.
+
+### Good to know
+- Home Assistant may expose new climate entities to voice assistants by default. The History view can't be controlled (changing its mode is rejected), but you can un-expose it under **Settings > Voice assistants > Expose**.
+- The chart shows what your relays did. The guard switch's own *Active* sensor can lag a run-limit stop, so prefer the physical relay as the heating/cooling input.
+- If you remove an input in **Configure**, its sensor stops updating and stays as *unavailable*. Delete it under **Settings > Devices & Services > Entities**.
+- After copying the files in, do a full Home Assistant restart: a reload is not enough for the new climate platform.
 
 ## Disclaimer
 
