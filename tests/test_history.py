@@ -24,6 +24,7 @@ from custom_components.climate_guard_switch.const import (
     CONF_HEATING_ENTITY,
     CONF_TARGET_ENTITY,
     CONF_TEMPERATURE_SENSOR,
+    CONF_TEMPERATURE_TRACES,
     ENTRY_TYPE_HISTORY,
 )
 from custom_components.climate_guard_switch.history import (
@@ -38,18 +39,21 @@ from custom_components.climate_guard_switch.history import (
     read_temperature,
     source_available,
     thermostat_mode,
+    trace_temperature,
+    traces_enabled,
 )
 from custom_components.climate_guard_switch.sensor import (
     GuardStatusSensor,
     HistoryActivitySensor,
     HistoryTargetTemperatureSensor,
+    HistoryTraceSensor,
     _history_sensors,
 )
 
 from conftest import _ConfigEntry, _HomeAssistant, _State  # type: ignore[import]
 
-TEMPERATURE = "sensor.water_temp"
-THERMOSTAT = "climate.water_thermostat"
+TEMPERATURE = "sensor.room_temperature"
+THERMOSTAT = "climate.room_thermostat"
 HEATING = "switch.heat"
 COOLING = "switch.cool"
 
@@ -76,7 +80,7 @@ def _entry(config: dict | None = None, **options) -> _ConfigEntry:
         data={CONF_ENTRY_TYPE: ENTRY_TYPE_HISTORY, **(FULL if config is None else config)},
         options=options,
         entry_id="hist1",
-        title="Water History",
+        title="Room History",
     )
 
 
@@ -122,7 +126,7 @@ def test_device_info_groups_every_entity_under_one_device() -> None:
     info = history_device_info(_entry())
 
     assert info["identifiers"] == {("climate_guard_switch", "hist1")}
-    assert info["name"] == "Water History"
+    assert info["name"] == "Room History"
     assert info["model"] == "Climate History"
 
 
@@ -406,7 +410,7 @@ def test_dial_range_falls_back_to_the_entity_defaults_without_a_usable_thermosta
 
 
 def test_dial_range_widens_so_a_hot_reading_is_never_off_the_dial() -> None:
-    """A 41 °C water temperature must not be clamped to the default 35 °C maximum."""
+    """A 41 °C reading must not be clamped to the default 35 °C maximum."""
     hass = _hass()
     hass.states.set(TEMPERATURE, "41.2", {"unit_of_measurement": "°C"})
     no_thermostat = _climate(hass, {CONF_TEMPERATURE_SENSOR: TEMPERATURE})
@@ -532,16 +536,22 @@ def test_one_sensor_is_created_per_configured_optional_input() -> None:
         HistoryTargetTemperatureSensor,
         HistoryActivitySensor,
         HistoryActivitySensor,
+        HistoryTraceSensor,
+        HistoryTraceSensor,
     ]
     assert [s._attr_unique_id for s in sensors] == [
         "hist1_target_temperature",
         "hist1_heating",
         "hist1_cooling",
+        "hist1_temperature_while_heating",
+        "hist1_temperature_while_cooling",
     ]
     assert [s._attr_translation_key for s in sensors] == [
         "target_temperature",
         "heating",
         "cooling",
+        "temperature_while_heating",
+        "temperature_while_cooling",
     ]
 
 
@@ -549,13 +559,13 @@ def test_no_temperature_mirror_and_no_sensors_for_unconfigured_inputs() -> None:
     # The source temperature sensor already has its own long-term statistics.
     assert _history_sensors(_entry({CONF_TEMPERATURE_SENSOR: TEMPERATURE})) == []
     only_heating = _history_sensors(_entry({CONF_TEMPERATURE_SENSOR: TEMPERATURE, CONF_HEATING_ENTITY: HEATING}))
-    assert [s._attr_unique_id for s in only_heating] == ["hist1_heating"]
+    assert [s._attr_unique_id for s in only_heating] == ["hist1_heating", "hist1_temperature_while_heating"]
 
 
 def test_an_input_cleared_in_options_no_longer_gets_a_sensor() -> None:
     sensors = _history_sensors(_entry(**{CONF_COOLING_ENTITY: None}))
 
-    assert [s._attr_unique_id for s in sensors] == ["hist1_target_temperature", "hist1_heating"]
+    assert [s._attr_unique_id for s in sensors] == ["hist1_target_temperature", "hist1_heating", "hist1_temperature_while_heating"]
 
 
 def test_every_history_sensor_is_a_measurement_so_it_gets_long_term_statistics() -> None:
@@ -644,7 +654,7 @@ async def test_sensor_platform_adds_history_sensors_and_no_status_sensor_for_his
     await sensor_platform.async_setup_entry(_hass(), _entry(), add)
 
     (added,), _ = add.call_args
-    assert len(added) == 3
+    assert len(added) == 5
     assert not any(isinstance(s, GuardStatusSensor) for s in added)
 
 
@@ -659,3 +669,93 @@ async def test_sensor_platform_still_adds_only_the_status_sensor_for_guard_entri
     (added,), _ = add.call_args
     assert len(added) == 1
     assert isinstance(added[0], GuardStatusSensor)
+
+
+# ---------------------------------------------------------------------------
+# "temperature while heating / cooling" traces
+# ---------------------------------------------------------------------------
+
+
+def test_traces_are_on_unless_switched_off() -> None:
+    assert traces_enabled({}) is True  # views from before the option existed
+    assert traces_enabled({CONF_TEMPERATURE_TRACES: True}) is True
+    assert traces_enabled({CONF_TEMPERATURE_TRACES: False}) is False
+
+
+def test_trace_temperature_is_the_temperature_only_while_on() -> None:
+    hass = _hass()
+    hass.states.set(TEMPERATURE, "21.5", {"unit_of_measurement": "°C"})
+
+    assert trace_temperature(hass, TEMPERATURE, ON, "°C") == 21.5
+    assert trace_temperature(hass, TEMPERATURE, OFF, "°C") is None
+    assert trace_temperature(hass, TEMPERATURE, UNAVAILABLE, "°C") is None
+    assert trace_temperature(hass, TEMPERATURE, None, "°C") is None
+
+
+def test_trace_temperature_is_converted_and_empty_while_the_sensor_is_unusable() -> None:
+    hass = _hass()
+    hass.states.set(TEMPERATURE, "70", {"unit_of_measurement": "°F"})
+    assert trace_temperature(hass, TEMPERATURE, ON, "°C") == pytest.approx(21.111, abs=1e-3)
+
+    hass.states.set(TEMPERATURE, "unavailable")
+    assert trace_temperature(hass, TEMPERATURE, ON, "°C") is None
+
+
+def test_trace_sensors_follow_the_activity_inputs_and_only_when_enabled() -> None:
+    traces = [s for s in _history_sensors(_entry()) if isinstance(s, HistoryTraceSensor)]
+    assert [s._attr_unique_id for s in traces] == ["hist1_temperature_while_heating", "hist1_temperature_while_cooling"]
+    assert [s._attr_translation_key for s in traces] == ["temperature_while_heating", "temperature_while_cooling"]
+
+    off = _history_sensors(_entry(**{CONF_TEMPERATURE_TRACES: False}))
+    assert not any(isinstance(s, HistoryTraceSensor) for s in off)
+    assert len(off) == 3  # the other sensors are untouched by the switch
+
+    no_relays = _history_sensors(_entry({CONF_TEMPERATURE_SENSOR: TEMPERATURE, CONF_CLIMATE_ENTITY: THERMOSTAT}))
+    assert not any(isinstance(s, HistoryTraceSensor) for s in no_relays)
+
+
+def test_trace_sensor_value_and_availability() -> None:
+    hass = _hass()
+    hass.states.set(TEMPERATURE, "21.5", {"unit_of_measurement": "°C"})
+    hass.states.set(HEATING, "on")
+    sensor = _sensor(HistoryTraceSensor, None, TEMPERATURE, HEATING, "temperature_while_heating", hass=hass)
+
+    assert sensor.native_value == 21.5
+    assert sensor.available is True
+
+    hass.states.set(HEATING, "off")
+    assert sensor.native_value is None  # state "unknown": an empty trace, never a made-up value
+    assert sensor.available is True
+
+    hass.states.set(HEATING, "unavailable")
+    assert sensor.available is False
+    hass.states.set(HEATING, "on")
+    hass.states.set(TEMPERATURE, "unavailable")
+    assert sensor.available is False
+
+
+@pytest.mark.parametrize("unit", ["°C", "°F"])
+def test_trace_sensor_is_a_hidden_diagnostic_temperature_in_the_system_unit(unit) -> None:
+    sensor = _sensor(HistoryTraceSensor, None, TEMPERATURE, COOLING, "temperature_while_cooling", hass=_hass(unit))
+
+    assert sensor.native_unit_of_measurement == unit
+    assert sensor._attr_device_class == "temperature"
+    assert sensor._attr_state_class == "measurement"  # gets long-term statistics
+    assert sensor._attr_entity_category == "diagnostic"  # not exposed to assistants by default
+    assert sensor._attr_entity_registry_visible_default is False  # not in device picks by default
+    assert sensor._attr_icon == "mdi:thermometer-chevron-down"
+
+
+async def test_trace_sensor_follows_both_of_its_sources() -> None:
+    sensor = _sensor(HistoryTraceSensor, None, TEMPERATURE, HEATING, "temperature_while_heating")
+
+    with patch("custom_components.climate_guard_switch.sensor.async_track_state_change_event") as track:
+        await sensor.async_added_to_hass()
+
+    track.assert_called_once_with(sensor.hass, [TEMPERATURE, HEATING], sensor._handle_source_change)
+
+
+def test_percent_sensors_are_hidden_by_default_but_the_target_is_not() -> None:
+    """A device pick should give one temperature chart, not an extra % chart."""
+    assert HistoryActivitySensor._attr_entity_registry_visible_default is False
+    assert getattr(HistoryTargetTemperatureSensor, "_attr_entity_registry_visible_default", True) is True

@@ -23,8 +23,8 @@ def _history_entry(**options) -> _ConfigEntry:
     return _ConfigEntry(
         data={
             CONF_ENTRY_TYPE: ENTRY_TYPE_HISTORY,
-            CONF_TEMPERATURE_SENSOR: "sensor.water_temp",
-            CONF_CLIMATE_ENTITY: "climate.water_thermostat",
+            CONF_TEMPERATURE_SENSOR: "sensor.room_temperature",
+            CONF_CLIMATE_ENTITY: "climate.room_thermostat",
             CONF_HEATING_ENTITY: "switch.heat",
         },
         options=options,
@@ -33,13 +33,13 @@ def _history_entry(**options) -> _ConfigEntry:
 
 async def test_history_diagnostics_lists_config_and_the_state_of_each_input() -> None:
     hass = _HomeAssistant()
-    hass.states.set("sensor.water_temp", "41.2")
-    hass.states.set("climate.water_thermostat", "heat", {"temperature": 55.0})
+    hass.states.set("sensor.room_temperature", "41.2")
+    hass.states.set("climate.room_thermostat", "heat", {"temperature": 55.0})
 
     result = await async_get_config_entry_diagnostics(hass, _history_entry())
 
     assert set(result) == {"config", "related_entities"}
-    assert result["config"][CONF_TEMPERATURE_SENSOR] == "sensor.water_temp"
+    assert result["config"][CONF_TEMPERATURE_SENSOR] == "sensor.room_temperature"
     assert result["related_entities"]["temperature_sensor"]["state"] == "41.2"
     assert result["related_entities"]["thermostat"]["attributes"] == {"temperature": 55.0}
     # Configured but not in the state machine: reported, not a crash.

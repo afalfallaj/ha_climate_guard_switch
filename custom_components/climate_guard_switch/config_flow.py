@@ -23,6 +23,7 @@ from .const import (
     CONF_SUN_ENTITY,
     CONF_TARGET_ENTITY,
     CONF_TEMPERATURE_SENSOR,
+    CONF_TEMPERATURE_TRACES,
     CONF_WEATHER_ENTITY,
     DEFAULT_HEARTBEAT,
     DEFAULT_HISTORY_NAME,
@@ -136,6 +137,13 @@ def _get_history_schema(defaults: dict[str, Any] | None = None, include_name: bo
             selector.EntitySelectorConfig(domain=["switch", "binary_sensor", "input_boolean"])
         )
 
+    # A checkbox is always submitted, so unlike the entity fields it never needs
+    # nulling out in the options flow. Absent (older views) means on.
+    schema[vol.Optional(
+        CONF_TEMPERATURE_TRACES,
+        default=defaults.get(CONF_TEMPERATURE_TRACES) is not False,
+    )] = selector.BooleanSelector()
+
     return vol.Schema(schema)
 
 
@@ -176,7 +184,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Create a read-only history view.
 
         No unique_id on purpose: the inputs are editable later, so an id derived
-        from them would go stale, and several views (e.g. water heater and room)
+        from them would go stale, and several views (e.g. one per room)
         are legitimate.
         """
         if user_input is not None:

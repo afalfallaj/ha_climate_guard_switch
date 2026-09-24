@@ -37,14 +37,16 @@
           "temperature_sensor": "Temperature sensor",
           "climate_entity": "Thermostat (For The Target Line)",
           "heating_entity": "Heating (Relay Or Switch)",
-          "cooling_entity": "Cooling (Relay Or Switch)"
+          "cooling_entity": "Cooling (Relay Or Switch)",
+          "temperature_traces": "Temperature traces (for charts over any date range)"
         },
         "data_description": {
           "name": "Used as the device name.",
           "temperature_sensor": "The temperature line of the chart. Heating and cooling are shaded under it, so this is required.",
           "climate_entity": "Optional. Adds the target temperature line and follows the thermostat's mode.",
-          "heating_entity": "Optional. Shades the chart while this is on. Pick the physical relay (for example a Shelly switch) so the chart shows what actually ran, not what was requested.",
-          "cooling_entity": "Optional. Shades the chart while this is on. Pick the physical relay (for example a Shelly switch) so the chart shows what actually ran, not what was requested."
+          "heating_entity": "Optional. Shades the chart while this is on. Pick the physical relay so the chart shows what actually ran, not what was requested.",
+          "cooling_entity": "Optional. Shades the chart while this is on. Pick the physical relay so the chart shows what actually ran, not what was requested.",
+          "temperature_traces": "Adds two hidden sensors, \"Temperature while heating\" and \"Temperature while cooling\", that carry the temperature only while that input is on. Put them in a statistics-graph card with period: hour to mark heating red and cooling blue in the same chart for any date range. See the README."
         }
       },
       "reconfigure": {
@@ -60,6 +62,8 @@
     },
     "abort": {
       "already_configured": "Device is already configured",
+      "already_in_progress": "Configuration flow is already in progress",
+      "reconfigure_successful": "Re-configuration was successful",
       "history_reconfigure": "History views have no device type — use Configure to change their inputs."
     }
   },
@@ -90,13 +94,15 @@
           "temperature_sensor": "Temperature sensor",
           "climate_entity": "Thermostat (For The Target Line)",
           "heating_entity": "Heating (Relay Or Switch)",
-          "cooling_entity": "Cooling (Relay Or Switch)"
+          "cooling_entity": "Cooling (Relay Or Switch)",
+          "temperature_traces": "Temperature traces (for charts over any date range)"
         },
         "data_description": {
           "temperature_sensor": "The temperature line of the chart. Heating and cooling are shaded under it, so this is required.",
           "climate_entity": "Optional. Adds the target temperature line and follows the thermostat's mode.",
-          "heating_entity": "Optional. Shades the chart while this is on. Pick the physical relay (for example a Shelly switch) so the chart shows what actually ran, not what was requested.",
-          "cooling_entity": "Optional. Shades the chart while this is on. Pick the physical relay (for example a Shelly switch) so the chart shows what actually ran, not what was requested."
+          "heating_entity": "Optional. Shades the chart while this is on. Pick the physical relay so the chart shows what actually ran, not what was requested.",
+          "cooling_entity": "Optional. Shades the chart while this is on. Pick the physical relay so the chart shows what actually ran, not what was requested.",
+          "temperature_traces": "Adds two hidden sensors, \"Temperature while heating\" and \"Temperature while cooling\", that carry the temperature only while that input is on. Put them in a statistics-graph card with period: hour to mark heating red and cooling blue in the same chart for any date range. See the README."
         }
       }
     }
@@ -122,6 +128,12 @@
       },
       "cooling": {
         "name": "Cooling"
+      },
+      "temperature_while_heating": {
+        "name": "Temperature while heating"
+      },
+      "temperature_while_cooling": {
+        "name": "Temperature while cooling"
       }
     },
     "binary_sensor": {

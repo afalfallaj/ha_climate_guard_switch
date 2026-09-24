@@ -106,8 +106,8 @@ class HistoryClimate(ClimateEntity):
     def min_temp(self) -> float:
         """Low end of the more-info dial: the thermostat's own, widened to fit the reading.
 
-        The entity's default range is 7-35 °C, which would leave a hot-water
-        temperature off the dial. The charts never use this.
+        The entity's default range is 7-35 °C, which would leave a hotter
+        reading off the dial. The charts never use this.
         """
         low = read_float_attribute(self._state(self._thermostat), ATTR_MIN_TEMP)
         if low is None:

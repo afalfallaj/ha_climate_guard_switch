@@ -101,6 +101,16 @@ class UnitOfTemperature(enum.StrEnum):
 
 _ha_const.UnitOfTemperature = UnitOfTemperature
 
+
+class EntityCategory(enum.StrEnum):
+    """Stand-in for homeassistant.const.EntityCategory."""
+
+    CONFIG = "config"
+    DIAGNOSTIC = "diagnostic"
+
+
+_ha_const.EntityCategory = EntityCategory
+
 # ---------------------------------------------------------------------------
 # homeassistant.exceptions / util.unit_conversion — a real C/F/K converter that
 # raises like the real one for units it doesn't know, so read_temperature's

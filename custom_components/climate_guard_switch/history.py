@@ -29,7 +29,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.util.unit_conversion import TemperatureConverter
 
-from .const import CONF_ENTRY_TYPE, DOMAIN, ENTRY_TYPE_HISTORY
+from .const import CONF_ENTRY_TYPE, CONF_TEMPERATURE_TRACES, DOMAIN, ENTRY_TYPE_HISTORY
 
 
 def is_history_entry(entry: ConfigEntry) -> bool:
@@ -162,3 +162,23 @@ def derive_hvac_action(
     if not any(source_available(state) for configured, state in relays if configured):
         return None
     return HVACAction.IDLE
+
+
+def traces_enabled(config: Mapping[str, Any]) -> bool:
+    """Whether the "temperature while heating/cooling" sensors are wanted. Absent means yes."""
+    return config.get(CONF_TEMPERATURE_TRACES) is not False
+
+
+def trace_temperature(
+    hass: HomeAssistant, temperature_sensor: str | None, activity: State | None, to_unit: str
+) -> float | None:
+    """The temperature while `activity` is on; None (an empty trace) while it is off.
+
+    Home Assistant only keeps long-term statistics for sensors, and only draws
+    values of one kind in one chart, so this is how a relay's on/off periods can
+    be shown in the temperature chart for any date range: as the temperature
+    itself, present only while the equipment ran.
+    """
+    if not is_on(activity):
+        return None
+    return read_temperature(hass, temperature_sensor, to_unit)

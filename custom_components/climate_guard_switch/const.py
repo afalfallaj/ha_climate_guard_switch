@@ -24,6 +24,9 @@ ENTRY_TYPE_HISTORY = "history"
 CONF_TEMPERATURE_SENSOR = "temperature_sensor"
 CONF_HEATING_ENTITY = "heating_entity"
 CONF_COOLING_ENTITY = "cooling_entity"
+# "Temperature while heating/cooling" sensors for long-range single-chart views.
+# Absent means on, so views created before the option existed get them too.
+CONF_TEMPERATURE_TRACES = "temperature_traces"
 
 DEVICE_TYPE_HEATER = "heater"
 DEVICE_TYPE_COOLER = "cooler"

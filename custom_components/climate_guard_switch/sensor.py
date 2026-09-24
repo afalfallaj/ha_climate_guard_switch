@@ -9,7 +9,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import ATTR_TEMPERATURE, PERCENTAGE
+from homeassistant.const import ATTR_TEMPERATURE, PERCENTAGE, EntityCategory
 from homeassistant.core import Event, HomeAssistant, State, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -21,6 +21,7 @@ from .const import (
     CONF_CLIMATE_ENTITY,
     CONF_COOLING_ENTITY,
     CONF_HEATING_ENTITY,
+    CONF_TEMPERATURE_SENSOR,
     DOMAIN,
 )
 from .coordinator import ClimateGuardCoordinator
@@ -31,6 +32,8 @@ from .history import (
     is_on,
     read_float_attribute,
     source_available,
+    trace_temperature,
+    traces_enabled,
 )
 
 async def async_setup_entry(
@@ -91,45 +94,58 @@ def _history_sensors(config_entry: ConfigEntry) -> list[HistorySensor]:
     what keeps the history viewable over long date ranges.
     """
     config = history_config(config_entry)
+    temperature = config.get(CONF_TEMPERATURE_SENSOR)
+    thermostat = config.get(CONF_CLIMATE_ENTITY)
+    heating = config.get(CONF_HEATING_ENTITY)
+    cooling = config.get(CONF_COOLING_ENTITY)
+
     sensors: list[HistorySensor] = []
-    if thermostat := config.get(CONF_CLIMATE_ENTITY):
+    if thermostat:
         sensors.append(HistoryTargetTemperatureSensor(config_entry, thermostat))
-    if heating := config.get(CONF_HEATING_ENTITY):
+    if heating:
         sensors.append(HistoryActivitySensor(config_entry, heating, "heating"))
-    if cooling := config.get(CONF_COOLING_ENTITY):
+    if cooling:
         sensors.append(HistoryActivitySensor(config_entry, cooling, "cooling"))
+    if temperature and traces_enabled(config):
+        if heating:
+            sensors.append(HistoryTraceSensor(config_entry, temperature, heating, "temperature_while_heating"))
+        if cooling:
+            sensors.append(HistoryTraceSensor(config_entry, temperature, cooling, "temperature_while_cooling"))
     return sensors
 
 
 class HistorySensor(SensorEntity):
-    """Read-only sensor derived from one source entity of a History view."""
+    """Read-only sensor derived from the source entities of a History view."""
 
     _attr_has_entity_name = True
     _attr_should_poll = False
     _attr_state_class = SensorStateClass.MEASUREMENT
 
-    def __init__(self, config_entry: ConfigEntry, source: str, key: str) -> None:
-        """Initialize."""
-        self._source = source
+    def __init__(self, config_entry: ConfigEntry, sources: tuple[str, ...], key: str) -> None:
+        """Initialize; `sources` are the entity ids this sensor derives from."""
+        self._sources = sources
         self._attr_unique_id = f"{config_entry.entry_id}_{key}"
         self._attr_translation_key = key
         self._attr_device_info = history_device_info(config_entry)
 
+    def _state_of(self, index: int) -> State | None:
+        return self.hass.states.get(self._sources[index])
+
     @property
     def _source_state(self) -> State | None:
-        return self.hass.states.get(self._source)
+        return self._state_of(0)
 
     @property
     def available(self) -> bool:
-        """Unavailable while the source is, so no bogus value reaches the statistics."""
-        return source_available(self._source_state)
+        """Unavailable while any source is, so no bogus value reaches the statistics."""
+        return all(source_available(self._state_of(i)) for i in range(len(self._sources)))
 
     async def async_added_to_hass(self) -> None:
-        """Follow the source entity."""
+        """Follow the source entities."""
         await super().async_added_to_hass()
         self.async_on_remove(
             async_track_state_change_event(
-                self.hass, [self._source], self._handle_source_change
+                self.hass, list(self._sources), self._handle_source_change
             )
         )
 
@@ -146,7 +162,7 @@ class HistoryTargetTemperatureSensor(HistorySensor):
 
     def __init__(self, config_entry: ConfigEntry, thermostat: str) -> None:
         """Initialize."""
-        super().__init__(config_entry, thermostat, "target_temperature")
+        super().__init__(config_entry, (thermostat,), "target_temperature")
 
     @property
     def native_unit_of_measurement(self) -> str:
@@ -168,13 +184,55 @@ class HistoryActivitySensor(HistorySensor):
 
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_suggested_display_precision = 0
+    # Hidden for views created from now on: in a History-page device pick these
+    # would add a separate "%" chart under the temperature chart. Views that
+    # already registered them keep them visible (the registry is not touched).
+    _attr_entity_registry_visible_default = False
 
     def __init__(self, config_entry: ConfigEntry, source: str, key: str) -> None:
         """Initialize; `key` is "heating" or "cooling"."""
-        super().__init__(config_entry, source, key)
+        super().__init__(config_entry, (source,), key)
         self._attr_icon = "mdi:fire" if key == "heating" else "mdi:snowflake"
 
     @property
     def native_value(self) -> int:
         """Return 100 while the source is on."""
         return 100 if is_on(self._source_state) else 0
+
+
+class HistoryTraceSensor(HistorySensor):
+    """The temperature, present only while the heating (or cooling) entity is on.
+
+    Home Assistant draws values of one kind in one chart and keeps long-term
+    statistics only for sensors. A temperature that exists only while the
+    equipment runs therefore lets a card mark the heating/cooling periods (red
+    and blue) inside the temperature chart for any date range: list it after
+    the temperature in a history-graph card, or in a statistics-graph card with
+    period: hour. Idle time is `unknown`, never a made-up number.
+
+    Hidden and diagnostic by default: hidden keeps it out of History-page device
+    picks (there, the statistics part would join the segments across idle
+    hours) and diagnostic keeps it out of the default voice-assistant exposure.
+    """
+
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_visible_default = False
+    _attr_suggested_display_precision = 1
+
+    def __init__(self, config_entry: ConfigEntry, temperature_sensor: str, activity: str, key: str) -> None:
+        """Initialize; `key` is "temperature_while_heating" or "temperature_while_cooling"."""
+        super().__init__(config_entry, (temperature_sensor, activity), key)
+        self._attr_icon = (
+            "mdi:thermometer-chevron-up" if key == "temperature_while_heating" else "mdi:thermometer-chevron-down"
+        )
+
+    @property
+    def native_unit_of_measurement(self) -> str:
+        """Same unit as the temperature it mirrors: the system unit."""
+        return self.hass.config.units.temperature_unit
+
+    @property
+    def native_value(self) -> float | None:
+        """The temperature while the activity entity is on, else None."""
+        return trace_temperature(self.hass, self._sources[0], self._state_of(1), self.native_unit_of_measurement)

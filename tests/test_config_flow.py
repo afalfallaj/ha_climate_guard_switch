@@ -13,6 +13,7 @@ from custom_components.climate_guard_switch.config_flow import (
     ConfigFlow,
     HistoryOptionsFlowHandler,
     OptionsFlowHandler,
+    _get_history_schema,
 )
 from custom_components.climate_guard_switch.const import (
     CONF_CLIMATE_ENTITY,
@@ -24,6 +25,7 @@ from custom_components.climate_guard_switch.const import (
     CONF_RUN_LIMIT,
     CONF_TARGET_ENTITY,
     CONF_TEMPERATURE_SENSOR,
+    CONF_TEMPERATURE_TRACES,
     DEFAULT_HISTORY_NAME,
     DEVICE_TYPE_COOLER,
     DEVICE_TYPE_HEATER,
@@ -33,10 +35,10 @@ from custom_components.climate_guard_switch.const import (
 from conftest import AbortFlow, _ConfigEntry  # type: ignore[import]
 
 TARGET_ENTITY = "switch.heater"
-TEMPERATURE_SENSOR = "sensor.water_temperature"
-THERMOSTAT = "climate.water_thermostat"
-HEATING = "switch.water_heat"
-COOLING = "switch.water_cool"
+TEMPERATURE_SENSOR = "sensor.room_temperature"
+THERMOSTAT = "climate.room_thermostat"
+HEATING = "switch.heater_relay"
+COOLING = "switch.cooler_relay"
 
 
 def _user_input(**overrides) -> dict:
@@ -50,7 +52,7 @@ def _user_input(**overrides) -> dict:
 
 def _history_input(**overrides) -> dict:
     data = {
-        "name": "Water History",
+        "name": "Room History",
         CONF_TEMPERATURE_SENSOR: TEMPERATURE_SENSOR,
         CONF_CLIMATE_ENTITY: THERMOSTAT,
         CONF_HEATING_ENTITY: HEATING,
@@ -70,7 +72,7 @@ def _history_entry(**options) -> _ConfigEntry:
             CONF_COOLING_ENTITY: COOLING,
         },
         options=options,
-        title="Water History",
+        title="Room History",
     )
 
 
@@ -133,7 +135,7 @@ async def test_history_step_creates_entry_without_unique_id() -> None:
     result = await flow.async_step_history(_history_input())
 
     assert result["type"] == "create_entry"
-    assert result["title"] == "Water History"
+    assert result["title"] == "Room History"
     assert flow._unique_id is None
     assert result["data"] == {
         CONF_ENTRY_TYPE: ENTRY_TYPE_HISTORY,
@@ -280,3 +282,33 @@ async def test_reconfigure_step_shows_form_prefilled_with_current_device_type() 
 
     assert result["type"] == "form"
     assert result["step_id"] == "reconfigure"
+
+
+async def test_history_step_stores_the_traces_switch_when_turned_off() -> None:
+    flow = ConfigFlow()
+
+    result = await flow.async_step_history(_history_input(temperature_traces=False))
+
+    assert result["data"][CONF_TEMPERATURE_TRACES] is False
+
+
+async def test_history_options_flow_keeps_the_traces_switch_and_never_nulls_it() -> None:
+    flow = HistoryOptionsFlowHandler()
+    flow.config_entry = _history_entry()
+
+    result = await flow.async_step_init({CONF_TEMPERATURE_SENSOR: TEMPERATURE_SENSOR, CONF_TEMPERATURE_TRACES: False})
+    assert result["data"][CONF_TEMPERATURE_TRACES] is False
+
+    # Only the entity fields get nulled out when absent; an absent switch stays absent (= on).
+    result = await flow.async_step_init({CONF_TEMPERATURE_SENSOR: TEMPERATURE_SENSOR})
+    assert CONF_TEMPERATURE_TRACES not in result["data"]
+
+
+def test_history_form_traces_switch_defaults_to_on_unless_stored_off() -> None:
+    def default_of(schema):
+        marker = next(m for m in schema.schema if str(m.schema) == CONF_TEMPERATURE_TRACES)
+        return marker.default()
+
+    assert default_of(_get_history_schema()) is True  # new views, and views from before the option existed
+    assert default_of(_get_history_schema({CONF_TEMPERATURE_TRACES: True})) is True
+    assert default_of(_get_history_schema({CONF_TEMPERATURE_TRACES: False})) is False
