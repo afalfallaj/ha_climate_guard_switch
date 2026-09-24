@@ -23,7 +23,6 @@ from .const import (
     CONF_SUN_ENTITY,
     CONF_TARGET_ENTITY,
     CONF_TEMPERATURE_SENSOR,
-    CONF_TEMPERATURE_TRACES,
     CONF_WEATHER_ENTITY,
     DEFAULT_HEARTBEAT,
     DEFAULT_HISTORY_NAME,
@@ -136,13 +135,6 @@ def _get_history_schema(defaults: dict[str, Any] | None = None, include_name: bo
         )] = selector.EntitySelector(
             selector.EntitySelectorConfig(domain=["switch", "binary_sensor", "input_boolean"])
         )
-
-    # A checkbox is always submitted, so unlike the entity fields it never needs
-    # nulling out in the options flow. Absent (older views) means on.
-    schema[vol.Optional(
-        CONF_TEMPERATURE_TRACES,
-        default=defaults.get(CONF_TEMPERATURE_TRACES) is not False,
-    )] = selector.BooleanSelector()
 
     return vol.Schema(schema)
 

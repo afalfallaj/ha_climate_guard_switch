@@ -58,6 +58,7 @@ class _HomeAssistant:
         self.config_entries = MagicMock()
         self.config = MagicMock()
         self.config.units.temperature_unit = "°C"
+        self.entity_registry = _EntityRegistry()
         self._tasks: list[asyncio.Task] = []
 
     def async_create_task(self, coro):
@@ -86,7 +87,6 @@ _ha_const.STATE_UNKNOWN = "unknown"
 _ha_const.ATTR_TEMPERATURE = "temperature"
 _ha_const.ATTR_UNIT_OF_MEASUREMENT = "unit_of_measurement"
 _ha_const.CONF_NAME = "name"
-_ha_const.PERCENTAGE = "%"
 _ha_const.PRECISION_TENTHS = 0.1
 _ha_const.Platform = MagicMock()
 
@@ -154,7 +154,7 @@ _ha_util_unit_conversion.TemperatureConverter = _TemperatureConverter
 
 # ---------------------------------------------------------------------------
 # Entity base classes — minimal stand-ins for homeassistant.helpers.entity.Entity
-# (and the climate/sensor subclasses): just enough for the history entities to
+# (and the sensor subclass): just enough for the history entities to
 # run, recording state writes and removal callbacks so tests can assert on them.
 # ---------------------------------------------------------------------------
 
@@ -178,63 +178,9 @@ class _Entity:
 # ---------------------------------------------------------------------------
 
 
-class HVACMode(enum.StrEnum):
-    OFF = "off"
-    HEAT = "heat"
-    COOL = "cool"
-    HEAT_COOL = "heat_cool"
-    AUTO = "auto"
-    DRY = "dry"
-    FAN_ONLY = "fan_only"
-
-
-class HVACAction(enum.StrEnum):
-    COOLING = "cooling"
-    DEFROSTING = "defrosting"
-    DRYING = "drying"
-    FAN = "fan"
-    HEATING = "heating"
-    IDLE = "idle"
-    OFF = "off"
-    PREHEATING = "preheating"
-
-
-class ClimateEntityFeature(enum.IntFlag):
-    TARGET_TEMPERATURE = 1
-    TARGET_TEMPERATURE_RANGE = 2
-    TARGET_HUMIDITY = 4
-    FAN_MODE = 8
-    PRESET_MODE = 16
-    SWING_MODE = 32
-    TURN_OFF = 128
-    TURN_ON = 256
-    SWING_HORIZONTAL_MODE = 512
-
-
-class ClimateEntity(_Entity):
-    """Stand-in for homeassistant.components.climate.ClimateEntity."""
-
-    # The real defaults (7-35 °C) that a subclass gets unless it overrides them.
-    @property
-    def min_temp(self) -> float:
-        return 7.0
-
-    @property
-    def max_temp(self) -> float:
-        return 35.0
-
-
+# coordinator.py imports ATTR_TEMPERATURE from here; nothing else of the climate package is used.
 _ha_components_climate = MagicMock()
 _ha_components_climate.ATTR_TEMPERATURE = "temperature"
-_ha_components_climate.ATTR_MIN_TEMP = "min_temp"
-_ha_components_climate.ATTR_MAX_TEMP = "max_temp"
-_ha_components_climate.ATTR_HVAC_ACTION = "hvac_action"
-_ha_components_climate.ATTR_TARGET_TEMP_LOW = "target_temp_low"
-_ha_components_climate.ATTR_TARGET_TEMP_HIGH = "target_temp_high"
-_ha_components_climate.HVACMode = HVACMode
-_ha_components_climate.HVACAction = HVACAction
-_ha_components_climate.ClimateEntityFeature = ClimateEntityFeature
-_ha_components_climate.ClimateEntity = ClimateEntity
 
 # ---------------------------------------------------------------------------
 # homeassistant.components.sensor / diagnostics / helpers.device_registry /
@@ -268,6 +214,51 @@ _ha_device_registry = MagicMock()
 _ha_device_registry.DeviceInfo = dict  # the real one is a TypedDict, i.e. a dict
 
 _ha_entity_platform = MagicMock()
+
+
+class RegistryEntryHider(enum.StrEnum):
+    """Stand-in for homeassistant.helpers.entity_registry.RegistryEntryHider."""
+
+    INTEGRATION = "integration"
+    USER = "user"
+
+
+class _EntityRegistryEntry:
+    """Minimal stand-in for homeassistant.helpers.entity_registry.RegistryEntry."""
+
+    def __init__(
+        self, entity_id: str, unique_id: str, config_entry_id: str, hidden_by=None, entity_category=None
+    ) -> None:
+        self.entity_id = entity_id
+        self.unique_id = unique_id
+        self.config_entry_id = config_entry_id
+        self.hidden_by = hidden_by
+        self.entity_category = entity_category
+
+
+class _EntityRegistry:
+    """Minimal stand-in for homeassistant.helpers.entity_registry.EntityRegistry."""
+
+    def __init__(self) -> None:
+        self.entries: dict[str, _EntityRegistryEntry] = {}
+
+    def add(self, entity_id: str, unique_id: str, config_entry_id: str, **fields) -> None:
+        self.entries[entity_id] = _EntityRegistryEntry(entity_id, unique_id, config_entry_id, **fields)
+
+    def async_remove(self, entity_id: str) -> None:
+        del self.entries[entity_id]
+
+    def async_update_entity(self, entity_id: str, **changes) -> None:
+        for field, value in changes.items():
+            setattr(self.entries[entity_id], field, value)
+
+
+_ha_entity_registry = MagicMock()
+_ha_entity_registry.RegistryEntryHider = RegistryEntryHider
+_ha_entity_registry.async_get = lambda hass: hass.entity_registry
+_ha_entity_registry.async_entries_for_config_entry = lambda registry, config_entry_id: [
+    entry for entry in registry.entries.values() if entry.config_entry_id == config_entry_id
+]
 
 # ---------------------------------------------------------------------------
 # homeassistant.helpers.event — coordinator.py schedules via these, but tests
@@ -519,6 +510,7 @@ _ha_helpers.selector = _ha_selector
 _ha_helpers.update_coordinator = _ha_update_coordinator
 _ha_helpers.device_registry = _ha_device_registry
 _ha_helpers.entity_platform = _ha_entity_platform
+_ha_helpers.entity_registry = _ha_entity_registry
 
 _ha_top = MagicMock()
 _ha_top.config_entries = _ha_config_entries  # `from homeassistant import config_entries`
@@ -543,6 +535,7 @@ sys.modules.update(
         "homeassistant.helpers.update_coordinator": _ha_update_coordinator,
         "homeassistant.helpers.device_registry": _ha_device_registry,
         "homeassistant.helpers.entity_platform": _ha_entity_platform,
+        "homeassistant.helpers.entity_registry": _ha_entity_registry,
         "homeassistant.components": _ha_components,
         "homeassistant.components.climate": _ha_components_climate,
         "homeassistant.components.sensor": _ha_components_sensor,

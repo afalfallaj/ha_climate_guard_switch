@@ -35,7 +35,7 @@ A custom Home Assistant integration acting as a "Smart Proxy" for your climate h
 
 1.  Go to **Settings > Devices & Services > Add Integration**.
 2.  Search for **"Climate Guard Switch"**.
-3.  Choose **Guard switch** (protects a heater/cooler relay) or **History view** (a read-only combined history chart, see [History view](#history-view-optional)).
+3.  Choose **Guard switch** (protects a heater/cooler relay) or **History view** (temperature, target and heating/cooling in one chart, see [History view](#history-view-optional)).
 4.  For a guard switch, follow the setup wizard:
     - **Target Entity**: The physical switch (e.g., `switch.heater_relay`).
     - **Device Type**: Heater or Cooler (affects icons).
@@ -61,30 +61,29 @@ climate:
 
 ## History view (optional)
 
-Home Assistant's built-in **History** page draws one combined chart for a thermostat: the current temperature, the target temperature, and shaded heating/cooling periods. A **History view** builds that same chart from entities of *any* integration, so everything is in one place, and **each person picks their own date range** (24 hours, 7 days, a year...) without changing anything for anyone else.
+A **History view** is a read-only device that lets Home Assistant's *built-in* cards show a temperature, its target and the heating/cooling periods **together in one chart, for any date range**, with each viewer choosing their own range. The entities it reads can come from any integration, and it never switches anything. You can add several views (for example one per room).
 
-It is **read-only**: no controls, and it never switches anything. It is separate from the guard switch, so existing guards are unaffected, and you can add several views (for example one per room).
+### Why it exists
+Home Assistant draws values of one kind per chart and keeps long-term statistics only for sensors. A relay's on/off can never share a chart with a temperature, and beyond the raw history (10 days by default) it cannot be drawn at all. The History view turns the pieces into temperature sensors:
+
+| Sensor | Value |
+|---|---|
+| **Target temperature** | the linked thermostat's target |
+| **Temperature while heating** | the temperature, but only while the heating input is on; empty otherwise |
+| **Temperature while cooling** | the same for the cooling input |
+
+Drawn in red and blue on top of the temperature, the last two mark the heating and cooling periods. Because they are temperature sensors they have long-term statistics, so this works for any range.
 
 ### Set it up
 1.  **Settings > Devices & Services > Add Integration > Climate Guard Switch**, then choose **History view**.
 2.  Pick the entities. They can come from any integration, and you can change them later with **Configure**:
-    - **Temperature sensor** (required): the temperature line. Heating and cooling are shaded under it.
-    - **Thermostat** (optional): adds the target temperature line.
-    - **Heating** / **Cooling** (optional): a `switch`, `binary_sensor` or `input_boolean`. Pick the physical relay, so the shading shows what actually ran and not what was requested.
+    - **Temperature sensor** (required): the temperature the marks are drawn on.
+    - **Thermostat** (optional): adds the Target temperature sensor.
+    - **Heating** / **Cooling** (optional): a `switch`, `binary_sensor` or `input_boolean`. Pick the physical relay, so the marks show what actually ran and not what was requested.
 
-The device gets a read-only **climate** entity (the combined chart) and, for each optional input, sensors: **Target temperature**, **Heating** and **Cooling** (0 or 100 %, hidden by default), and **Temperature while heating** / **Temperature while cooling** (hidden by default, see [below](#heating-and-cooling-in-the-same-graph-for-any-date-range)).
+Entity ids follow the view name; the examples below use a view called "Climate History" and a temperature sensor `sensor.room_temperature`.
 
-### View it
-Open **History** in the sidebar, choose the device and set any date range. The range is kept in the page address, so it is yours alone and you can bookmark it.
-
-Picking the device shows the climate entity and the Target temperature; the other sensors are hidden by default and can be added by name, or un-hidden under **Settings > Devices & services > Entities**.
-
-### Heating and cooling in the same graph, for any date range
-
-Home Assistant draws values of one kind per chart and keeps long-term statistics only for sensors, so a relay's on/off can never join the temperature chart for old dates. The History view works around this with two more sensors, **Temperature while heating** and **Temperature while cooling**: each carries the temperature only while that input is on, and is empty otherwise. Drawn in red and blue on top of the temperature they mark the heating and cooling periods in the same graph, and because they are temperature sensors they have long-term statistics, so this works for any date range.
-
-They are hidden by default (list them in cards by name; they are not meant for device picks) and marked diagnostic (not exposed to voice assistants). The **Temperature traces** option in **Configure** turns them off. Entity ids follow the view name; the examples use a view called "Climate History" and a temperature sensor `sensor.room_temperature`.
-
+### Show it
 Recent days (raw history):
 ```yaml
 type: history-graph
@@ -93,8 +92,10 @@ hours_to_show: 72
 entities:
   - entity: sensor.room_temperature
     name: Temperature
+    color: white      # suits a dark theme; pick any CSS color
   - entity: sensor.climate_history_target_temperature
     name: Target
+    color: orange
   - entity: sensor.climate_history_temperature_while_heating   # traces last, so they draw on top
     name: Heating
     color: red
@@ -114,8 +115,10 @@ chart_type: line
 entities:
   - entity: sensor.room_temperature
     name: Temperature
+    color: white      # suits a dark theme; pick any CSS color
   - entity: sensor.climate_history_target_temperature
     name: Target
+    color: orange
   - entity: sensor.climate_history_temperature_while_heating
     name: Heating
     color: red
@@ -140,8 +143,10 @@ cards:
     entities:
       - entity: sensor.room_temperature
         name: Temperature
+        color: white
       - entity: sensor.climate_history_target_temperature
         name: Target
+        color: orange
       - entity: sensor.climate_history_temperature_while_heating
         name: Heating
         color: red
@@ -150,35 +155,16 @@ cards:
         color: blue
 ```
 
-Good to know:
+### Good to know
+- History starts when the device is added; nothing is backfilled.
+- The `history-graph` card uses raw history, which the recorder keeps for `purge_keep_days` (10 by default). The `statistics-graph` card is not limited.
 - Over a whole year the red and blue marks show *when* heating and cooling happened, not how much. Use a shorter range for detail.
 - Keep `period: hour`. With `day` or `month` the marks join into continuous lines across idle days.
-- On the History page, the older (statistics) part joins the marks across idle hours. That is why these sensors are hidden from device picks; the cards above are the intended way to view them.
+- On the History page (for example when you pick the whole device), the older statistics part joins the marks across idle hours. Use the cards above for long ranges.
 - Hourly values are slightly approximate at the edges of a run: the last reading is carried at most to the end of its 5-minute bucket.
+- If you remove an input in **Configure**, its sensor stays as *unavailable*. Delete it under **Settings > Devices & Services > Entities**.
+- After copying the files in, do a full Home Assistant restart.
 - Checked against Home Assistant 2026.9.3; the built-in cards may change.
-
-### How far back can I go?
-Home Assistant keeps two kinds of history:
-
-| | What it is | How long |
-|---|---|---|
-| **Raw history** | Every change. Draws the shaded chart. | Only `purge_keep_days` (**10 days by default**) |
-| **Long-term statistics** | One value per hour for sensors. | **Forever** |
-
-- **Any date range** works through long-term statistics: the **Target temperature**, **Heating** and **Cooling** sensors of this device (Heating 35 % means the heating ran about 35 % of that hour), and the **Temperature while heating / cooling** sensors (see above). Add your temperature sensor to the History selection too if you want its temperature line for old dates (it has its own long-term statistics if it has a state class).
-- The **shaded combined chart** only reaches back as far as raw history. To keep more, raise the recorder setting in `configuration.yaml`:
-  ```yaml
-  recorder:
-    purge_keep_days: 365
-  ```
-  This applies to *every* entity, so the database grows and long ranges load more slowly. Use `recorder: exclude:` for entities you don't need history for.
-- **History starts when the device is added.** Nothing is backfilled, so a year of history exists only after a year.
-
-### Good to know
-- Home Assistant may expose new climate entities to voice assistants by default. The History view can't be controlled (changing its mode is rejected), but you can un-expose it under **Settings > Voice assistants > Expose**.
-- The chart shows what your relays did. The guard switch's own *Active* sensor can lag a run-limit stop, so prefer the physical relay as the heating/cooling input.
-- If you remove an input in **Configure**, its sensor stops updating and stays as *unavailable*. Delete it under **Settings > Devices & Services > Entities**.
-- After copying the files in, do a full Home Assistant restart: a reload is not enough for the new climate platform.
 
 ## Disclaimer
 

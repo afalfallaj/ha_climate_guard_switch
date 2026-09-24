@@ -24,9 +24,6 @@ ENTRY_TYPE_HISTORY = "history"
 CONF_TEMPERATURE_SENSOR = "temperature_sensor"
 CONF_HEATING_ENTITY = "heating_entity"
 CONF_COOLING_ENTITY = "cooling_entity"
-# "Temperature while heating/cooling" sensors for long-range single-chart views.
-# Absent means on, so views created before the option existed get them too.
-CONF_TEMPERATURE_TRACES = "temperature_traces"
 
 DEVICE_TYPE_HEATER = "heater"
 DEVICE_TYPE_COOLER = "cooler"
@@ -43,10 +40,9 @@ PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
 ]
 
-# History entries have no coordinator and no controls: just a read-only climate
-# entity (the combined history chart) plus statistics sensors.
+# History entries have no coordinator and no controls: just read-only sensors
+# with long-term statistics, for charts over any date range.
 HISTORY_PLATFORMS: list[Platform] = [
-    Platform.CLIMATE,
     Platform.SENSOR,
 ]
 

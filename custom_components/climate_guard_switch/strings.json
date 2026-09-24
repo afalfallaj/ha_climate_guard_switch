@@ -6,7 +6,7 @@
         "description": "What do you want to add?",
         "menu_options": {
           "guard": "Guard switch — protect a heater/cooler relay",
-          "history": "History view — one combined history chart (read-only)"
+          "history": "History view — temperature, target and heating/cooling in one chart (read-only)"
         }
       },
       "guard": {
@@ -31,22 +31,20 @@
       },
       "history": {
         "title": "Create History view",
-        "description": "Adds a read-only device that shows a temperature, its target and the heating/cooling periods together in Home Assistant's built-in History page, where you pick your own date range. The entities can come from any integration.\n\nHistory starts when this device is added. The shaded chart keeps as much history as your recorder does (10 days by default, see `purge_keep_days`); the Target temperature, Heating and Cooling sensors are kept as long-term statistics indefinitely.",
+        "description": "Adds a read-only device with sensors for the target temperature and for the temperature while heating / while cooling, so a chart card can show the temperature, its target and the heating/cooling periods together for any date range. The entities can come from any integration.\n\nHistory starts when this device is added. The sensors are kept as long-term statistics indefinitely. See the README for card examples.",
         "data": {
           "name": "Name",
           "temperature_sensor": "Temperature sensor",
           "climate_entity": "Thermostat (For The Target Line)",
           "heating_entity": "Heating (Relay Or Switch)",
-          "cooling_entity": "Cooling (Relay Or Switch)",
-          "temperature_traces": "Temperature traces (for charts over any date range)"
+          "cooling_entity": "Cooling (Relay Or Switch)"
         },
         "data_description": {
           "name": "Used as the device name.",
-          "temperature_sensor": "The temperature line of the chart. Heating and cooling are shaded under it, so this is required.",
-          "climate_entity": "Optional. Adds the target temperature line and follows the thermostat's mode.",
-          "heating_entity": "Optional. Shades the chart while this is on. Pick the physical relay so the chart shows what actually ran, not what was requested.",
-          "cooling_entity": "Optional. Shades the chart while this is on. Pick the physical relay so the chart shows what actually ran, not what was requested.",
-          "temperature_traces": "Adds two hidden sensors, \"Temperature while heating\" and \"Temperature while cooling\", that carry the temperature only while that input is on. Put them in a statistics-graph card with period: hour to mark heating red and cooling blue in the same chart for any date range. See the README."
+          "temperature_sensor": "The temperature the heating/cooling marks are drawn on. Required.",
+          "climate_entity": "Optional. Adds the Target temperature sensor (the target line).",
+          "heating_entity": "Optional. Marks the periods this is on in the chart. Pick the physical relay so the chart shows what actually ran, not what was requested.",
+          "cooling_entity": "Optional. Marks the periods this is on in the chart. Pick the physical relay so the chart shows what actually ran, not what was requested."
         }
       },
       "reconfigure": {
@@ -94,15 +92,13 @@
           "temperature_sensor": "Temperature sensor",
           "climate_entity": "Thermostat (For The Target Line)",
           "heating_entity": "Heating (Relay Or Switch)",
-          "cooling_entity": "Cooling (Relay Or Switch)",
-          "temperature_traces": "Temperature traces (for charts over any date range)"
+          "cooling_entity": "Cooling (Relay Or Switch)"
         },
         "data_description": {
-          "temperature_sensor": "The temperature line of the chart. Heating and cooling are shaded under it, so this is required.",
-          "climate_entity": "Optional. Adds the target temperature line and follows the thermostat's mode.",
-          "heating_entity": "Optional. Shades the chart while this is on. Pick the physical relay so the chart shows what actually ran, not what was requested.",
-          "cooling_entity": "Optional. Shades the chart while this is on. Pick the physical relay so the chart shows what actually ran, not what was requested.",
-          "temperature_traces": "Adds two hidden sensors, \"Temperature while heating\" and \"Temperature while cooling\", that carry the temperature only while that input is on. Put them in a statistics-graph card with period: hour to mark heating red and cooling blue in the same chart for any date range. See the README."
+          "temperature_sensor": "The temperature the heating/cooling marks are drawn on. Required.",
+          "climate_entity": "Optional. Adds the Target temperature sensor (the target line).",
+          "heating_entity": "Optional. Marks the periods this is on in the chart. Pick the physical relay so the chart shows what actually ran, not what was requested.",
+          "cooling_entity": "Optional. Marks the periods this is on in the chart. Pick the physical relay so the chart shows what actually ran, not what was requested."
         }
       }
     }
@@ -122,12 +118,6 @@
       },
       "target_temperature": {
         "name": "Target temperature"
-      },
-      "heating": {
-        "name": "Heating"
-      },
-      "cooling": {
-        "name": "Cooling"
       },
       "temperature_while_heating": {
         "name": "Temperature while heating"

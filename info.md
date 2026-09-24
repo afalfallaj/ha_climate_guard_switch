@@ -8,7 +8,7 @@ A "smart proxy" for your climate heater/cooler switch — adds run limits, coold
 - Periodically re-pulses the hardware switch while running — this keeps the device's own built-in auto-off timer from tripping during normal use; that timer only becomes the active safety net if Home Assistant itself goes down and the pulses stop
 - Optionally only runs when the sun is up, the weather matches an allow-list, or gates on a linked thermostat
 - Run limit / cooldown are adjustable instantly from number sliders, no restart needed
-- Optional read-only **History view**: combines any temperature sensor, thermostat and heating/cooling entities (from any integration) into Home Assistant's built-in history chart, where each viewer picks their own date range, with heating and cooling marked in the same graph for any range
+- Optional read-only **History view**: sensors that let Home Assistant's built-in cards show a temperature, its target and the heating/cooling periods in one chart for any date range (entities from any integration)
 
 ### Requirements:
 - An existing `switch.*` entity to guard (e.g. a relay driving a heater, cooler or fan) — not needed for a History view

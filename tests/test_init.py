@@ -23,7 +23,7 @@ from custom_components.climate_guard_switch.const import (
     PLATFORMS,
 )
 
-from conftest import _ConfigEntriesRegistry, _ConfigEntry, _HomeAssistant  # type: ignore[import]
+from conftest import EntityCategory, RegistryEntryHider, _ConfigEntriesRegistry, _ConfigEntry, _HomeAssistant  # type: ignore[import]
 
 TARGET_ENTITY = "switch.heater"
 
@@ -48,7 +48,7 @@ def _guard_entry() -> _ConfigEntry:
 
 def test_history_platforms_are_read_only_subset_without_the_guard_controls() -> None:
     assert HISTORY_PLATFORMS != PLATFORMS
-    assert len(HISTORY_PLATFORMS) == 2  # climate + sensor only: no switch/number/binary_sensor
+    assert len(HISTORY_PLATFORMS) == 1  # sensor only: no switch/number/binary_sensor, no climate
 
 
 async def test_setup_history_entry_builds_no_coordinator_and_forwards_history_platforms() -> None:
@@ -120,3 +120,64 @@ async def test_migrate_entry_is_a_noop_for_current_version() -> None:
     assert result is True
     assert entry.unique_id == TARGET_ENTITY
     assert entry.version == 2
+
+
+async def test_setup_history_entry_removes_registry_entries_of_retired_entities() -> None:
+    """Views created with v0.0.4 had a climate entity and Heating/Cooling % sensors.
+
+    They are no longer created, so their registry entries are dropped on setup
+    instead of lingering as "unavailable"; everything else is left alone.
+    """
+    hass = _hass()
+    entry = _history_entry()  # entry_id "test_entry"
+    reg = hass.entity_registry
+    for entity_id, unique_id in (
+        ("climate.old_view", "test_entry_history"),
+        ("sensor.old_view_heating", "test_entry_heating"),
+        ("sensor.old_view_cooling", "test_entry_cooling"),
+        ("sensor.old_view_target_temperature", "test_entry_target_temperature"),
+        ("sensor.old_view_temperature_while_heating", "test_entry_temperature_while_heating"),
+    ):
+        reg.add(entity_id, unique_id, "test_entry")
+    reg.add("sensor.other_view_heating", "other_entry_heating", "other_entry")
+
+    with patch("custom_components.climate_guard_switch.ClimateGuardCoordinator"):
+        assert await async_setup_entry(hass, entry) is True
+
+    assert set(reg.entries) == {
+        "sensor.old_view_target_temperature",
+        "sensor.old_view_temperature_while_heating",
+        "sensor.other_view_heating",
+    }
+
+
+async def test_setup_guard_entry_does_not_touch_the_registry() -> None:
+    hass = _hass()
+    hass.entity_registry.add("climate.something", "test_entry_history", "test_entry")
+
+    with patch("custom_components.climate_guard_switch.ClimateGuardCoordinator") as coordinator_cls:
+        coordinator_cls.return_value.async_init = AsyncMock()
+        assert await async_setup_entry(hass, _guard_entry()) is True
+
+    assert set(hass.entity_registry.entries) == {"climate.something"}
+
+
+async def test_setup_history_entry_unhides_traces_that_v005_registered_hidden_and_diagnostic() -> None:
+    """v0.0.5 created the traces hidden + diagnostic; the registry keeps that from the
+    first registration, so the integration clears what it set. A user's own hiding stays."""
+    hass = _hass()
+    reg = hass.entity_registry
+    reg.add("sensor.v_temperature_while_heating", "test_entry_temperature_while_heating", "test_entry",
+            hidden_by=RegistryEntryHider.INTEGRATION, entity_category=EntityCategory.DIAGNOSTIC)
+    reg.add("sensor.v_temperature_while_cooling", "test_entry_temperature_while_cooling", "test_entry",
+            hidden_by=RegistryEntryHider.USER, entity_category=EntityCategory.DIAGNOSTIC)
+    reg.add("sensor.v_target_temperature", "test_entry_target_temperature", "test_entry")
+
+    with patch("custom_components.climate_guard_switch.ClimateGuardCoordinator"):
+        assert await async_setup_entry(hass, _history_entry()) is True
+
+    heating, cooling = reg.entries["sensor.v_temperature_while_heating"], reg.entries["sensor.v_temperature_while_cooling"]
+    assert heating.hidden_by is None and heating.entity_category is None
+    assert cooling.hidden_by is RegistryEntryHider.USER  # the user's choice is respected
+    assert cooling.entity_category is None
+    assert set(reg.entries) == {"sensor.v_temperature_while_heating", "sensor.v_temperature_while_cooling", "sensor.v_target_temperature"}

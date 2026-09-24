@@ -9,14 +9,8 @@ module ever calls a service.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
 from typing import Any
 
-from homeassistant.components.climate import (
-    ATTR_HVAC_ACTION,
-    HVACAction,
-    HVACMode,
-)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     ATTR_UNIT_OF_MEASUREMENT,
@@ -29,7 +23,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.util.unit_conversion import TemperatureConverter
 
-from .const import CONF_ENTRY_TYPE, CONF_TEMPERATURE_TRACES, DOMAIN, ENTRY_TYPE_HISTORY
+from .const import CONF_ENTRY_TYPE, DOMAIN, ENTRY_TYPE_HISTORY
 
 
 def is_history_entry(entry: ConfigEntry) -> bool:
@@ -40,11 +34,6 @@ def is_history_entry(entry: ConfigEntry) -> bool:
 def history_config(entry: ConfigEntry) -> dict[str, Any]:
     """Effective config: options override data, and a None option clears a field."""
     return {**entry.data, **entry.options}
-
-
-def configured_entities(config: Mapping[str, Any], *keys: str) -> list[str]:
-    """Entity ids set under `keys`, skipping fields that are missing or cleared."""
-    return [entity_id for key in keys if (entity_id := config.get(key))]
 
 
 def history_device_info(entry: ConfigEntry) -> DeviceInfo:
@@ -106,67 +95,6 @@ def read_float_attribute(state: State | None, attribute: str) -> float | None:
     if not source_available(state):
         return None
     return _finite_float(state.attributes.get(attribute))
-
-
-def thermostat_mode(state: State | None) -> HVACMode | None:
-    """The thermostat's HVAC mode, or None when unavailable or not a valid mode."""
-    if not source_available(state):
-        return None
-    try:
-        return HVACMode(state.state)
-    except ValueError:
-        return None
-
-
-def mode_without_thermostat(has_heating: bool, has_cooling: bool) -> HVACMode:
-    """Mode to show when no thermostat is linked, from what is configured."""
-    if has_heating and has_cooling:
-        return HVACMode.HEAT_COOL
-    if has_heating:
-        return HVACMode.HEAT
-    if has_cooling:
-        return HVACMode.COOL
-    return HVACMode.OFF
-
-
-def derive_hvac_action(
-    thermostat: State | None,
-    heating: State | None,
-    cooling: State | None,
-    *,
-    has_heating: bool,
-    has_cooling: bool,
-) -> HVACAction | None:
-    """What the equipment is actually doing, judged from the real relays.
-
-    The relays are the ground truth, so a relay that is on wins even if the
-    thermostat says it is off. With no relays configured there is nothing to
-    judge from, so the thermostat's own hvac_action is mirrored instead.
-    """
-    if not has_heating and not has_cooling:
-        if not source_available(thermostat):
-            return None
-        try:
-            return HVACAction(thermostat.attributes.get(ATTR_HVAC_ACTION))
-        except ValueError:
-            return None
-
-    if has_heating and is_on(heating):
-        return HVACAction.HEATING
-    if has_cooling and is_on(cooling):
-        return HVACAction.COOLING
-    if thermostat_mode(thermostat) == HVACMode.OFF:
-        return HVACAction.OFF
-
-    relays = ((has_heating, heating), (has_cooling, cooling))
-    if not any(source_available(state) for configured, state in relays if configured):
-        return None
-    return HVACAction.IDLE
-
-
-def traces_enabled(config: Mapping[str, Any]) -> bool:
-    """Whether the "temperature while heating/cooling" sensors are wanted. Absent means yes."""
-    return config.get(CONF_TEMPERATURE_TRACES) is not False
 
 
 def trace_temperature(

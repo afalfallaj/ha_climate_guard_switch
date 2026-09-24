@@ -13,7 +13,6 @@ from custom_components.climate_guard_switch.config_flow import (
     ConfigFlow,
     HistoryOptionsFlowHandler,
     OptionsFlowHandler,
-    _get_history_schema,
 )
 from custom_components.climate_guard_switch.const import (
     CONF_CLIMATE_ENTITY,
@@ -25,7 +24,6 @@ from custom_components.climate_guard_switch.const import (
     CONF_RUN_LIMIT,
     CONF_TARGET_ENTITY,
     CONF_TEMPERATURE_SENSOR,
-    CONF_TEMPERATURE_TRACES,
     DEFAULT_HISTORY_NAME,
     DEVICE_TYPE_COOLER,
     DEVICE_TYPE_HEATER,
@@ -283,32 +281,3 @@ async def test_reconfigure_step_shows_form_prefilled_with_current_device_type() 
     assert result["type"] == "form"
     assert result["step_id"] == "reconfigure"
 
-
-async def test_history_step_stores_the_traces_switch_when_turned_off() -> None:
-    flow = ConfigFlow()
-
-    result = await flow.async_step_history(_history_input(temperature_traces=False))
-
-    assert result["data"][CONF_TEMPERATURE_TRACES] is False
-
-
-async def test_history_options_flow_keeps_the_traces_switch_and_never_nulls_it() -> None:
-    flow = HistoryOptionsFlowHandler()
-    flow.config_entry = _history_entry()
-
-    result = await flow.async_step_init({CONF_TEMPERATURE_SENSOR: TEMPERATURE_SENSOR, CONF_TEMPERATURE_TRACES: False})
-    assert result["data"][CONF_TEMPERATURE_TRACES] is False
-
-    # Only the entity fields get nulled out when absent; an absent switch stays absent (= on).
-    result = await flow.async_step_init({CONF_TEMPERATURE_SENSOR: TEMPERATURE_SENSOR})
-    assert CONF_TEMPERATURE_TRACES not in result["data"]
-
-
-def test_history_form_traces_switch_defaults_to_on_unless_stored_off() -> None:
-    def default_of(schema):
-        marker = next(m for m in schema.schema if str(m.schema) == CONF_TEMPERATURE_TRACES)
-        return marker.default()
-
-    assert default_of(_get_history_schema()) is True  # new views, and views from before the option existed
-    assert default_of(_get_history_schema({CONF_TEMPERATURE_TRACES: True})) is True
-    assert default_of(_get_history_schema({CONF_TEMPERATURE_TRACES: False})) is False

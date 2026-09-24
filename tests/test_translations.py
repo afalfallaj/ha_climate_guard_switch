@@ -118,7 +118,7 @@ def test_every_entity_translation_key_has_a_name() -> None:
     )
     keys["sensor"].update(sensor._attr_translation_key for sensor in _history_sensors(history_entry))
 
-    assert {"status", "target_temperature", "heating", "cooling"} <= keys["sensor"]  # sanity
+    assert {"status", "target_temperature", "temperature_while_heating", "temperature_while_cooling"} <= keys["sensor"]  # sanity
     for platform, platform_keys in keys.items():
         for key in platform_keys:
             name = EN["entity"][platform].get(key, {}).get("name")
