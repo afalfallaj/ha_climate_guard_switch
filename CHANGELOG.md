@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v0.0.5] - 2026-09-24
+
+* Enhance Climate Guard Switch Integration
+
 ## [v0.0.4] - 2026-09-24
 
 * Add History view support for Climate Guard Switch integration
