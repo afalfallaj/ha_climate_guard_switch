@@ -1,13 +1,14 @@
 """Tests for custom_components/climate_guard_switch/__init__.py.
 
 Covers the version 1 -> 2 migration that backfills unique_id for entries
-created before duplicate-detection existed, and the setup/unload split between
-guard entries (coordinator + guard platforms) and History view entries (no
-coordinator, read-only platforms).
+created before duplicate-detection existed, the guard setup/unload, and the
+rejection of leftover "History view" entries from v0.0.4–v0.0.6.
 """
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from custom_components.climate_guard_switch import (
     async_migrate_entry,
@@ -18,12 +19,12 @@ from custom_components.climate_guard_switch.const import (
     CONF_ENTRY_TYPE,
     CONF_TARGET_ENTITY,
     CONF_TEMPERATURE_SENSOR,
+    DOMAIN,
     ENTRY_TYPE_HISTORY,
-    HISTORY_PLATFORMS,
     PLATFORMS,
 )
 
-from conftest import EntityCategory, RegistryEntryHider, _ConfigEntriesRegistry, _ConfigEntry, _HomeAssistant  # type: ignore[import]
+from conftest import ConfigEntryError, _ConfigEntriesRegistry, _ConfigEntry, _HomeAssistant  # type: ignore[import]
 
 TARGET_ENTITY = "switch.heater"
 
@@ -35,36 +36,11 @@ def _hass() -> _HomeAssistant:
     return hass
 
 
-def _history_entry() -> _ConfigEntry:
-    # Deliberately has no CONF_TARGET_ENTITY: History views have no target switch.
-    return _ConfigEntry(
-        data={CONF_ENTRY_TYPE: ENTRY_TYPE_HISTORY, CONF_TEMPERATURE_SENSOR: "sensor.temperature"}
-    )
-
-
 def _guard_entry() -> _ConfigEntry:
     return _ConfigEntry(data={CONF_TARGET_ENTITY: TARGET_ENTITY})
 
 
-def test_history_platforms_are_read_only_subset_without_the_guard_controls() -> None:
-    assert HISTORY_PLATFORMS != PLATFORMS
-    assert len(HISTORY_PLATFORMS) == 1  # sensor only: no switch/number/binary_sensor, no climate
-
-
-async def test_setup_history_entry_builds_no_coordinator_and_forwards_history_platforms() -> None:
-    hass = _hass()
-    entry = _history_entry()
-
-    with patch("custom_components.climate_guard_switch.ClimateGuardCoordinator") as coordinator_cls:
-        assert await async_setup_entry(hass, entry) is True
-
-    coordinator_cls.assert_not_called()
-    assert entry.runtime_data is None
-    hass.config_entries.async_forward_entry_setups.assert_awaited_once_with(entry, HISTORY_PLATFORMS)
-
-
-async def test_setup_guard_entry_still_builds_coordinator_and_forwards_guard_platforms() -> None:
-    """Regression: the guard path must be exactly what it was before History views."""
+async def test_setup_guard_entry_builds_coordinator_and_forwards_platforms() -> None:
     hass = _hass()
     entry = _guard_entry()
 
@@ -78,22 +54,30 @@ async def test_setup_guard_entry_still_builds_coordinator_and_forwards_guard_pla
     hass.config_entries.async_forward_entry_setups.assert_awaited_once_with(entry, PLATFORMS)
 
 
-async def test_unload_history_entry_unloads_history_platforms() -> None:
-    hass = _hass()
-    entry = _history_entry()
-
-    assert await async_unload_entry(hass, entry) is True
-
-    hass.config_entries.async_unload_platforms.assert_awaited_once_with(entry, HISTORY_PLATFORMS)
-
-
-async def test_unload_guard_entry_unloads_guard_platforms() -> None:
+async def test_unload_guard_entry_unloads_platforms() -> None:
     hass = _hass()
     entry = _guard_entry()
 
     assert await async_unload_entry(hass, entry) is True
 
     hass.config_entries.async_unload_platforms.assert_awaited_once_with(entry, PLATFORMS)
+
+
+async def test_leftover_history_entry_fails_setup_with_a_translated_reason() -> None:
+    """A "History view" entry (v0.0.4–v0.0.6) has no target switch; its sensors now
+    live on the guard device. It must fail cleanly, with the message to delete it,
+    instead of crashing on the missing target entity."""
+    hass = _hass()
+    entry = _ConfigEntry(data={CONF_ENTRY_TYPE: ENTRY_TYPE_HISTORY, CONF_TEMPERATURE_SENSOR: "sensor.t"})
+
+    with patch("custom_components.climate_guard_switch.ClimateGuardCoordinator") as coordinator_cls:
+        with pytest.raises(ConfigEntryError) as exc_info:
+            await async_setup_entry(hass, entry)
+
+    assert exc_info.value.translation_domain == DOMAIN
+    assert exc_info.value.translation_key == "history_view_removed"
+    coordinator_cls.assert_not_called()
+    hass.config_entries.async_forward_entry_setups.assert_not_awaited()
 
 
 async def test_migrate_entry_backfills_unique_id_and_bumps_version() -> None:
@@ -120,64 +104,3 @@ async def test_migrate_entry_is_a_noop_for_current_version() -> None:
     assert result is True
     assert entry.unique_id == TARGET_ENTITY
     assert entry.version == 2
-
-
-async def test_setup_history_entry_removes_registry_entries_of_retired_entities() -> None:
-    """Views created with v0.0.4 had a climate entity and Heating/Cooling % sensors.
-
-    They are no longer created, so their registry entries are dropped on setup
-    instead of lingering as "unavailable"; everything else is left alone.
-    """
-    hass = _hass()
-    entry = _history_entry()  # entry_id "test_entry"
-    reg = hass.entity_registry
-    for entity_id, unique_id in (
-        ("climate.old_view", "test_entry_history"),
-        ("sensor.old_view_heating", "test_entry_heating"),
-        ("sensor.old_view_cooling", "test_entry_cooling"),
-        ("sensor.old_view_target_temperature", "test_entry_target_temperature"),
-        ("sensor.old_view_temperature_while_heating", "test_entry_temperature_while_heating"),
-    ):
-        reg.add(entity_id, unique_id, "test_entry")
-    reg.add("sensor.other_view_heating", "other_entry_heating", "other_entry")
-
-    with patch("custom_components.climate_guard_switch.ClimateGuardCoordinator"):
-        assert await async_setup_entry(hass, entry) is True
-
-    assert set(reg.entries) == {
-        "sensor.old_view_target_temperature",
-        "sensor.old_view_temperature_while_heating",
-        "sensor.other_view_heating",
-    }
-
-
-async def test_setup_guard_entry_does_not_touch_the_registry() -> None:
-    hass = _hass()
-    hass.entity_registry.add("climate.something", "test_entry_history", "test_entry")
-
-    with patch("custom_components.climate_guard_switch.ClimateGuardCoordinator") as coordinator_cls:
-        coordinator_cls.return_value.async_init = AsyncMock()
-        assert await async_setup_entry(hass, _guard_entry()) is True
-
-    assert set(hass.entity_registry.entries) == {"climate.something"}
-
-
-async def test_setup_history_entry_unhides_traces_that_v005_registered_hidden_and_diagnostic() -> None:
-    """v0.0.5 created the traces hidden + diagnostic; the registry keeps that from the
-    first registration, so the integration clears what it set. A user's own hiding stays."""
-    hass = _hass()
-    reg = hass.entity_registry
-    reg.add("sensor.v_temperature_while_heating", "test_entry_temperature_while_heating", "test_entry",
-            hidden_by=RegistryEntryHider.INTEGRATION, entity_category=EntityCategory.DIAGNOSTIC)
-    reg.add("sensor.v_temperature_while_cooling", "test_entry_temperature_while_cooling", "test_entry",
-            hidden_by=RegistryEntryHider.USER, entity_category=EntityCategory.DIAGNOSTIC)
-    reg.add("sensor.v_target_temperature", "test_entry_target_temperature", "test_entry")
-
-    with patch("custom_components.climate_guard_switch.ClimateGuardCoordinator"):
-        assert await async_setup_entry(hass, _history_entry()) is True
-
-    heating, cooling = reg.entries["sensor.v_temperature_while_heating"], reg.entries["sensor.v_temperature_while_cooling"]
-    assert heating.hidden_by is None and heating.entity_category is None
-    assert cooling.hidden_by is RegistryEntryHider.USER  # the user's choice is respected
-    assert cooling.entity_category is None
-    assert set(reg.entries) == {"sensor.v_temperature_while_heating", "sensor.v_temperature_while_cooling", "sensor.v_target_temperature"}

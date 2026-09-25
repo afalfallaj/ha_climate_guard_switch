@@ -1,10 +1,10 @@
-"""Helpers for the History view entry type.
+"""Helpers for the guard's history chart sensors.
 
-A History view is a read-only mirror of entities that can come from any
-integration: a temperature sensor, an optional thermostat and optional
-heating/cooling entities. Everything here is a pure function of Home Assistant
-states, so it can be unit-tested without a running instance. Nothing in this
-module ever calls a service.
+Home Assistant draws values of one kind per chart and keeps long-term statistics
+only for sensors, so the guard publishes its thermostat's target and "the
+temperature while the relay ran" as temperature sensors. Everything here is a
+pure function of Home Assistant states, so it can be unit-tested without a
+running instance. Nothing in this module ever calls a service.
 """
 from __future__ import annotations
 
@@ -27,22 +27,17 @@ from .const import CONF_ENTRY_TYPE, DOMAIN, ENTRY_TYPE_HISTORY
 
 
 def is_history_entry(entry: ConfigEntry) -> bool:
-    """Return True for History view entries; anything else is a guard."""
+    """True for a leftover "History view" entry from v0.0.4–v0.0.6 (no longer supported)."""
     return entry.data.get(CONF_ENTRY_TYPE) == ENTRY_TYPE_HISTORY
 
 
-def history_config(entry: ConfigEntry) -> dict[str, Any]:
-    """Effective config: options override data, and a None option clears a field."""
-    return {**entry.data, **entry.options}
-
-
-def history_device_info(entry: ConfigEntry) -> DeviceInfo:
-    """Device shared by every entity of one History view."""
+def guard_device_info(entry: ConfigEntry) -> DeviceInfo:
+    """The guard's device, shared by every entity of one config entry."""
     return DeviceInfo(
         identifiers={(DOMAIN, entry.entry_id)},
         name=entry.title,
         manufacturer="Custom",
-        model="Climate History",
+        model="Climate Guard Switch",
     )
 
 
@@ -102,10 +97,8 @@ def trace_temperature(
 ) -> float | None:
     """The temperature while `activity` is on; None (an empty trace) while it is off.
 
-    Home Assistant only keeps long-term statistics for sensors, and only draws
-    values of one kind in one chart, so this is how a relay's on/off periods can
-    be shown in the temperature chart for any date range: as the temperature
-    itself, present only while the equipment ran.
+    A temperature that exists only while the equipment ran is how a relay's
+    on/off periods can be shown in the temperature chart for any date range.
     """
     if not is_on(activity):
         return None

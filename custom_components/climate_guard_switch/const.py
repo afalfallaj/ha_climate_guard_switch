@@ -10,20 +10,18 @@ CONF_RUN_LIMIT = "run_limit_minutes"
 CONF_COOLDOWN = "cooldown_minutes"
 CONF_HEARTBEAT = "heartbeat_interval_seconds"
 CONF_CLIMATE_ENTITY = "climate_entity"
+# Optional temperature for the history chart sensors; the linked thermostat's
+# current temperature is used when it is not set.
+CONF_TEMPERATURE_SENSOR = "temperature_sensor"
 
 CONF_DEVICE_TYPE = "device_type"
 CONF_ALLOWED_WEATHER = "allowed_weather_states"
 
-# Entry types. Guard entries predate this key and don't carry it, so a missing
-# CONF_ENTRY_TYPE always means "guard" — no migration needed.
+# v0.0.4 to v0.0.6 could create a separate "History view" entry, marked with
+# this key. Such entries are no longer supported: setup fails with a message
+# asking to delete them (the sensors now live on the guard device).
 CONF_ENTRY_TYPE = "entry_type"
-ENTRY_TYPE_GUARD = "guard"
 ENTRY_TYPE_HISTORY = "history"
-
-# History view entry: read-only mirror of entities from any integration.
-CONF_TEMPERATURE_SENSOR = "temperature_sensor"
-CONF_HEATING_ENTITY = "heating_entity"
-CONF_COOLING_ENTITY = "cooling_entity"
 
 DEVICE_TYPE_HEATER = "heater"
 DEVICE_TYPE_COOLER = "cooler"
@@ -31,19 +29,12 @@ DEVICE_TYPE_COOLER = "cooler"
 DEFAULT_RUN_LIMIT = 10
 DEFAULT_COOLDOWN = 40
 DEFAULT_HEARTBEAT = 10
-DEFAULT_HISTORY_NAME = "Climate History"
 
 PLATFORMS: list[Platform] = [
     Platform.SWITCH,
     Platform.NUMBER,
     Platform.SENSOR,
     Platform.BINARY_SENSOR,
-]
-
-# History entries have no coordinator and no controls: just read-only sensors
-# with long-term statistics, for charts over any date range.
-HISTORY_PLATFORMS: list[Platform] = [
-    Platform.SENSOR,
 ]
 
 # Standard HA Weather States

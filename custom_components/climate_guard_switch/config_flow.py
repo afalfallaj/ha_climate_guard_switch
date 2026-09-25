@@ -7,41 +7,43 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult, OptionsFlowWithReload
-from homeassistant.const import CONF_NAME
 from homeassistant.core import callback
 from homeassistant.helpers import selector
-import homeassistant.helpers.config_validation as cv
 
 from .const import (
     CONF_ALLOWED_WEATHER,
     CONF_CLIMATE_ENTITY,
-    CONF_COOLING_ENTITY,
     CONF_DEVICE_TYPE,
-    CONF_ENTRY_TYPE,
     CONF_HEARTBEAT,
-    CONF_HEATING_ENTITY,
     CONF_SUN_ENTITY,
     CONF_TARGET_ENTITY,
     CONF_TEMPERATURE_SENSOR,
     CONF_WEATHER_ENTITY,
     DEFAULT_HEARTBEAT,
-    DEFAULT_HISTORY_NAME,
     DEVICE_TYPE_COOLER,
     DEVICE_TYPE_HEATER,
     DOMAIN,
-    ENTRY_TYPE_GUARD,
-    ENTRY_TYPE_HISTORY,
     WEATHER_STATES,
 )
-from .history import history_config, is_history_entry
+from .history import is_history_entry
+
+# Optional fields: the frontend omits an emptied one from the submission, so the
+# options flow stores None for it to override (clear) the originally saved value.
+OPTIONAL_ENTITY_FIELDS = [
+    CONF_SUN_ENTITY,
+    CONF_WEATHER_ENTITY,
+    CONF_CLIMATE_ENTITY,
+    CONF_TEMPERATURE_SENSOR,
+    CONF_ALLOWED_WEATHER,
+]
 
 
 def _get_config_schema(defaults: dict[str, Any] | None = None, is_options: bool = False) -> vol.Schema:
     """Return the configuration schema with optional defaults."""
     defaults = defaults or {}
-    
+
     schema = {}
-    
+
     # Target Entity (Always editable)
     schema[vol.Required(
         CONF_TARGET_ENTITY,
@@ -49,7 +51,7 @@ def _get_config_schema(defaults: dict[str, Any] | None = None, is_options: bool 
     )] = selector.EntitySelector(
         selector.EntitySelectorConfig(domain="switch")
     )
-    
+
     if not is_options:
         schema[vol.Required(
             CONF_DEVICE_TYPE,
@@ -68,21 +70,30 @@ def _get_config_schema(defaults: dict[str, Any] | None = None, is_options: bool 
     )] = selector.EntitySelector(
         selector.EntitySelectorConfig(domain="sun")
     )
-    
+
     schema[vol.Optional(
         CONF_WEATHER_ENTITY,
         description={"suggested_value": defaults.get(CONF_WEATHER_ENTITY)}
     )] = selector.EntitySelector(
         selector.EntitySelectorConfig(domain="weather")
     )
-    
+
     schema[vol.Optional(
         CONF_CLIMATE_ENTITY,
         description={"suggested_value": defaults.get(CONF_CLIMATE_ENTITY)}
     )] = selector.EntitySelector(
         selector.EntitySelectorConfig(domain="climate")
     )
-    
+
+    # Temperature for the history chart sensors (the thermostat's current
+    # temperature is used when this is empty).
+    schema[vol.Optional(
+        CONF_TEMPERATURE_SENSOR,
+        description={"suggested_value": defaults.get(CONF_TEMPERATURE_SENSOR)}
+    )] = selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="sensor")
+    )
+
     schema[vol.Optional(
         CONF_ALLOWED_WEATHER,
         description={"suggested_value": defaults.get(CONF_ALLOWED_WEATHER)}
@@ -93,48 +104,12 @@ def _get_config_schema(defaults: dict[str, Any] | None = None, is_options: bool 
             mode=selector.SelectSelectorMode.DROPDOWN,
         )
     )
-    
+
     # Heartbeat Interval
     schema[vol.Optional(
         CONF_HEARTBEAT,
         description={"suggested_value": defaults.get(CONF_HEARTBEAT, DEFAULT_HEARTBEAT)}
     )] = vol.All(vol.Coerce(int), vol.Range(min=0))
-
-    return vol.Schema(schema)
-
-
-def _get_history_schema(defaults: dict[str, Any] | None = None, include_name: bool = False) -> vol.Schema:
-    """Return the History view schema: inputs can come from any integration."""
-    defaults = defaults or {}
-
-    schema = {}
-
-    if include_name:
-        schema[vol.Required(CONF_NAME, default=DEFAULT_HISTORY_NAME)] = selector.TextSelector()
-
-    # The temperature line is what the heating/cooling shading is drawn under,
-    # so it is the one required input.
-    schema[vol.Required(
-        CONF_TEMPERATURE_SENSOR,
-        description={"suggested_value": defaults.get(CONF_TEMPERATURE_SENSOR)}
-    )] = selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="sensor")
-    )
-
-    schema[vol.Optional(
-        CONF_CLIMATE_ENTITY,
-        description={"suggested_value": defaults.get(CONF_CLIMATE_ENTITY)}
-    )] = selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="climate")
-    )
-
-    for key in (CONF_HEATING_ENTITY, CONF_COOLING_ENTITY):
-        schema[vol.Optional(
-            key,
-            description={"suggested_value": defaults.get(key)}
-        )] = selector.EntitySelector(
-            selector.EntitySelectorConfig(domain=["switch", "binary_sensor", "input_boolean"])
-        )
 
     return vol.Schema(schema)
 
@@ -147,16 +122,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Choose what to add: a guard switch or a read-only history view."""
-        return self.async_show_menu(
-            step_id="user",
-            menu_options=[ENTRY_TYPE_GUARD, ENTRY_TYPE_HISTORY],
-        )
-
-    async def async_step_guard(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Handle the guard switch form."""
+        """Handle the initial step."""
         if user_input is not None:
             await self.async_set_unique_id(user_input[CONF_TARGET_ENTITY])
             self._abort_if_unique_id_configured()
@@ -166,27 +132,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_create_entry(title=title, data=user_input)
 
         return self.async_show_form(
-            step_id="guard",
+            step_id="user",
             data_schema=_get_config_schema(),
-        )
-
-    async def async_step_history(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Create a read-only history view.
-
-        No unique_id on purpose: the inputs are editable later, so an id derived
-        from them would go stale, and several views (e.g. one per room)
-        are legitimate.
-        """
-        if user_input is not None:
-            data = {CONF_ENTRY_TYPE: ENTRY_TYPE_HISTORY, **user_input}
-            title = data.pop(CONF_NAME).strip() or DEFAULT_HISTORY_NAME
-            return self.async_create_entry(title=title, data=data)
-
-        return self.async_show_form(
-            step_id="history",
-            data_schema=_get_history_schema(include_name=True),
         )
 
     async def async_step_reconfigure(
@@ -200,8 +147,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         reconfigure_entry = self._get_reconfigure_entry()
 
         if is_history_entry(reconfigure_entry):
-            # History views have no device type; their inputs are options.
-            return self.async_abort(reason="history_reconfigure")
+            return self.async_abort(reason="history_view_removed")
 
         if user_input is not None:
             type_name = user_input[CONF_DEVICE_TYPE].title()  # Heater or Cooler
@@ -232,8 +178,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         config_entry: config_entries.ConfigEntry,
     ) -> config_entries.OptionsFlow:
         """Create the options flow."""
-        if is_history_entry(config_entry):
-            return HistoryOptionsFlowHandler()
         return OptionsFlowHandler()
 
 
@@ -244,8 +188,11 @@ class OptionsFlowHandler(OptionsFlowWithReload):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Manage the options."""
+        if is_history_entry(self.config_entry):
+            return self.async_abort(reason="history_view_removed")
+
         if user_input is not None:
-            for key in [CONF_SUN_ENTITY, CONF_WEATHER_ENTITY, CONF_CLIMATE_ENTITY, CONF_ALLOWED_WEATHER]:
+            for key in OPTIONAL_ENTITY_FIELDS:
                 if key not in user_input:
                     user_input[key] = None
 
@@ -257,33 +204,4 @@ class OptionsFlowHandler(OptionsFlowWithReload):
         return self.async_show_form(
             step_id="init",
             data_schema=_get_config_schema(current_config, is_options=True),
-        )
-
-
-class HistoryOptionsFlowHandler(OptionsFlowWithReload):
-    """Options flow for a History view: change which entities it mirrors."""
-
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Entry point; the form lives in its own step so its strings stay separate."""
-        return await self.async_step_history(user_input)
-
-    async def async_step_history(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Manage the inputs."""
-        if user_input is not None:
-            # An optional field left empty is omitted from the submission; store
-            # None so it overrides (clears) the value from the original data.
-            for key in [CONF_CLIMATE_ENTITY, CONF_HEATING_ENTITY, CONF_COOLING_ENTITY]:
-                if key not in user_input:
-                    user_input[key] = None
-
-            options = {**self.config_entry.options, **user_input}
-            return self.async_create_entry(title="", data=options)
-
-        return self.async_show_form(
-            step_id="history",
-            data_schema=_get_history_schema(history_config(self.config_entry)),
         )

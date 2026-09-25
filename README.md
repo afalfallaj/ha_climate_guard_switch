@@ -35,11 +35,11 @@ A custom Home Assistant integration acting as a "Smart Proxy" for your climate h
 
 1.  Go to **Settings > Devices & Services > Add Integration**.
 2.  Search for **"Climate Guard Switch"**.
-3.  Choose **Guard switch** (protects a heater/cooler relay) or **History view** (temperature, target and heating/cooling in one chart, see [History view](#history-view-optional)).
-4.  For a guard switch, follow the setup wizard:
+3.  Follow the setup wizard:
     - **Target Entity**: The physical switch (e.g., `switch.heater_relay`).
     - **Device Type**: Heater or Cooler (affects icons).
-    - **Linked Thermostat**: (Optional) For manual overrides.
+    - **Linked Thermostat**: (Optional) For manual overrides, and the Target temperature sensor for history charts.
+    - **Temperature Sensor**: (Optional) For history charts, see [History charts](#history-charts-optional).
     - **Gates**: Select allowed Weather states or Sun requirements.
     - **Limits**: Set your defaults.
 
@@ -48,6 +48,7 @@ A custom Home Assistant integration acting as a "Smart Proxy" for your climate h
 This integration creates a **Device** with:
 - **Switch**: The main control entity. usage this in your `generic_thermostat` or `dual_smart_thermostat`.
 - **Number Entities**: Sliders to adjust limits on the fly.
+- **History chart sensors**: Target temperature and Temperature while heating/cooling, see [History charts](#history-charts-optional).
 
 ### Example YAML for Thermostat
 ```yaml
@@ -59,31 +60,29 @@ climate:
     target_sensor: sensor.room_temperature
 ```
 
-## History view (optional)
+## History charts (optional)
 
-A **History view** is a read-only device that lets Home Assistant's *built-in* cards show a temperature, its target and the heating/cooling periods **together in one chart, for any date range**, with each viewer choosing their own range. The entities it reads can come from any integration, and it never switches anything. You can add several views (for example one per room).
+Each guard device also offers read-only sensors that let Home Assistant's *built-in* cards show the temperature, its target and the heating/cooling periods **together in one chart, for any date range**, with each viewer choosing their own range.
 
-### Why it exists
-Home Assistant draws values of one kind per chart and keeps long-term statistics only for sensors. A relay's on/off can never share a chart with a temperature, and beyond the raw history (10 days by default) it cannot be drawn at all. The History view turns the pieces into temperature sensors:
+### Why they exist
+Home Assistant draws values of one kind per chart and keeps long-term statistics only for sensors. A relay's on/off can never share a chart with a temperature, and beyond the raw history (10 days by default) it cannot be drawn at all. So the guard publishes the pieces as temperature sensors:
 
 | Sensor | Value |
 |---|---|
-| **Target temperature** | the linked thermostat's target |
-| **Temperature while heating** | the temperature, but only while the heating input is on; empty otherwise |
-| **Temperature while cooling** | the same for the cooling input |
+| **Target temperature** | the linked thermostat's target (needs a linked thermostat) |
+| **Temperature while heating** (heater guards) / **Temperature while cooling** (cooler guards) | the temperature, but only while the guarded relay is on; empty otherwise |
 
-Drawn in red and blue on top of the temperature, the last two mark the heating and cooling periods. Because they are temperature sensors they have long-term statistics, so this works for any range.
+Drawn in red and blue on top of the temperature, the "while" sensors mark the heating and cooling periods. Because they are temperature sensors they have long-term statistics, so this works for any range.
 
 ### Set it up
-1.  **Settings > Devices & Services > Add Integration > Climate Guard Switch**, then choose **History view**.
-2.  Pick the entities. They can come from any integration, and you can change them later with **Configure**:
-    - **Temperature sensor** (required): the temperature the marks are drawn on.
-    - **Thermostat** (optional): adds the Target temperature sensor.
-    - **Heating** / **Cooling** (optional): a `switch`, `binary_sensor` or `input_boolean`. Pick the physical relay, so the marks show what actually ran and not what was requested.
-
-Entity ids follow the view name; the examples below use a view called "Climate History" and a temperature sensor `sensor.room_temperature`.
+- **Temperature Sensor** (optional, in the guard's setup or **Configure**): the temperature the marks are drawn on. If empty, the linked thermostat's current temperature is used. With neither, there is no "while" sensor.
+- The sensors follow the physical relay, so they show what actually ran.
+- A heater guard and a cooler guard that share one thermostat both get a Target temperature sensor; chart one of them (and disable the other if it bothers you).
+- Upgrading from v0.0.4 to v0.0.6: the separate "History view" entries are no longer supported and show a message asking you to delete them. The same sensors now live on your guard devices, under new entity ids.
 
 ### Show it
+Entity ids follow the guard names. The examples use guards called "Heater Guard" and "Cooler Guard" and a temperature sensor `sensor.room_temperature`.
+
 Recent days (raw history):
 ```yaml
 type: history-graph
@@ -93,13 +92,13 @@ entities:
   - entity: sensor.room_temperature
     name: Temperature
     color: white      # suits a dark theme; pick any CSS color
-  - entity: sensor.climate_history_target_temperature
+  - entity: sensor.heater_guard_target_temperature
     name: Target
     color: orange
-  - entity: sensor.climate_history_temperature_while_heating   # traces last, so they draw on top
+  - entity: sensor.heater_guard_temperature_while_heating   # traces last, so they draw on top
     name: Heating
     color: red
-  - entity: sensor.climate_history_temperature_while_cooling
+  - entity: sensor.cooler_guard_temperature_while_cooling
     name: Cooling
     color: blue
 ```
@@ -116,13 +115,13 @@ entities:
   - entity: sensor.room_temperature
     name: Temperature
     color: white      # suits a dark theme; pick any CSS color
-  - entity: sensor.climate_history_target_temperature
+  - entity: sensor.heater_guard_target_temperature
     name: Target
     color: orange
-  - entity: sensor.climate_history_temperature_while_heating
+  - entity: sensor.heater_guard_temperature_while_heating
     name: Heating
     color: red
-  - entity: sensor.climate_history_temperature_while_cooling
+  - entity: sensor.cooler_guard_temperature_while_cooling
     name: Cooling
     color: blue
 ```
@@ -144,25 +143,24 @@ cards:
       - entity: sensor.room_temperature
         name: Temperature
         color: white
-      - entity: sensor.climate_history_target_temperature
+      - entity: sensor.heater_guard_target_temperature
         name: Target
         color: orange
-      - entity: sensor.climate_history_temperature_while_heating
+      - entity: sensor.heater_guard_temperature_while_heating
         name: Heating
         color: red
-      - entity: sensor.climate_history_temperature_while_cooling
+      - entity: sensor.cooler_guard_temperature_while_cooling
         name: Cooling
         color: blue
 ```
 
 ### Good to know
-- History starts when the device is added; nothing is backfilled.
+- History starts when the sensors exist; nothing is backfilled.
 - The `history-graph` card uses raw history, which the recorder keeps for `purge_keep_days` (10 by default). The `statistics-graph` card is not limited.
 - Over a whole year the red and blue marks show *when* heating and cooling happened, not how much. Use a shorter range for detail.
 - Keep `period: hour`. With `day` or `month` the marks join into continuous lines across idle days.
 - On the History page (for example when you pick the whole device), the older statistics part joins the marks across idle hours. Use the cards above for long ranges.
 - Hourly values are slightly approximate at the edges of a run: the last reading is carried at most to the end of its 5-minute bucket.
-- If you remove an input in **Configure**, its sensor stays as *unavailable*. Delete it under **Settings > Devices & Services > Entities**.
 - After copying the files in, do a full Home Assistant restart.
 - Checked against Home Assistant 2026.9.3; the built-in cards may change.
 

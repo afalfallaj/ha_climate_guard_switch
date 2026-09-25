@@ -58,7 +58,6 @@ class _HomeAssistant:
         self.config_entries = MagicMock()
         self.config = MagicMock()
         self.config.units.temperature_unit = "°C"
-        self.entity_registry = _EntityRegistry()
         self._tasks: list[asyncio.Task] = []
 
     def async_create_task(self, coro):
@@ -102,15 +101,6 @@ class UnitOfTemperature(enum.StrEnum):
 _ha_const.UnitOfTemperature = UnitOfTemperature
 
 
-class EntityCategory(enum.StrEnum):
-    """Stand-in for homeassistant.const.EntityCategory."""
-
-    CONFIG = "config"
-    DIAGNOSTIC = "diagnostic"
-
-
-_ha_const.EntityCategory = EntityCategory
-
 # ---------------------------------------------------------------------------
 # homeassistant.exceptions / util.unit_conversion — a real C/F/K converter that
 # raises like the real one for units it doesn't know, so read_temperature's
@@ -122,8 +112,19 @@ class HomeAssistantError(Exception):
     """Stand-in for homeassistant.exceptions.HomeAssistantError."""
 
 
+class ConfigEntryError(HomeAssistantError):
+    """Stand-in for homeassistant.exceptions.ConfigEntryError."""
+
+    def __init__(self, *args, translation_domain=None, translation_key=None, translation_placeholders=None) -> None:
+        super().__init__(*args)
+        self.translation_domain = translation_domain
+        self.translation_key = translation_key
+        self.translation_placeholders = translation_placeholders
+
+
 _ha_exceptions = MagicMock()
 _ha_exceptions.HomeAssistantError = HomeAssistantError
+_ha_exceptions.ConfigEntryError = ConfigEntryError
 
 
 class _TemperatureConverter:
@@ -181,6 +182,7 @@ class _Entity:
 # coordinator.py imports ATTR_TEMPERATURE from here; nothing else of the climate package is used.
 _ha_components_climate = MagicMock()
 _ha_components_climate.ATTR_TEMPERATURE = "temperature"
+_ha_components_climate.ATTR_CURRENT_TEMPERATURE = "current_temperature"
 
 # ---------------------------------------------------------------------------
 # homeassistant.components.sensor / diagnostics / helpers.device_registry /
@@ -215,50 +217,6 @@ _ha_device_registry.DeviceInfo = dict  # the real one is a TypedDict, i.e. a dic
 
 _ha_entity_platform = MagicMock()
 
-
-class RegistryEntryHider(enum.StrEnum):
-    """Stand-in for homeassistant.helpers.entity_registry.RegistryEntryHider."""
-
-    INTEGRATION = "integration"
-    USER = "user"
-
-
-class _EntityRegistryEntry:
-    """Minimal stand-in for homeassistant.helpers.entity_registry.RegistryEntry."""
-
-    def __init__(
-        self, entity_id: str, unique_id: str, config_entry_id: str, hidden_by=None, entity_category=None
-    ) -> None:
-        self.entity_id = entity_id
-        self.unique_id = unique_id
-        self.config_entry_id = config_entry_id
-        self.hidden_by = hidden_by
-        self.entity_category = entity_category
-
-
-class _EntityRegistry:
-    """Minimal stand-in for homeassistant.helpers.entity_registry.EntityRegistry."""
-
-    def __init__(self) -> None:
-        self.entries: dict[str, _EntityRegistryEntry] = {}
-
-    def add(self, entity_id: str, unique_id: str, config_entry_id: str, **fields) -> None:
-        self.entries[entity_id] = _EntityRegistryEntry(entity_id, unique_id, config_entry_id, **fields)
-
-    def async_remove(self, entity_id: str) -> None:
-        del self.entries[entity_id]
-
-    def async_update_entity(self, entity_id: str, **changes) -> None:
-        for field, value in changes.items():
-            setattr(self.entries[entity_id], field, value)
-
-
-_ha_entity_registry = MagicMock()
-_ha_entity_registry.RegistryEntryHider = RegistryEntryHider
-_ha_entity_registry.async_get = lambda hass: hass.entity_registry
-_ha_entity_registry.async_entries_for_config_entry = lambda registry, config_entry_id: [
-    entry for entry in registry.entries.values() if entry.config_entry_id == config_entry_id
-]
 
 # ---------------------------------------------------------------------------
 # homeassistant.helpers.event — coordinator.py schedules via these, but tests
@@ -414,9 +372,6 @@ class _FlowHandlerBase:
     def async_show_form(self, *, step_id, data_schema=None, errors=None):
         return {"type": "form", "step_id": step_id, "data_schema": data_schema, "errors": errors or {}}
 
-    def async_show_menu(self, *, step_id, menu_options):
-        return {"type": "menu", "step_id": step_id, "menu_options": menu_options}
-
     def async_create_entry(self, *, title=None, data=None):
         entry = _ConfigEntry(data=data, title=title, unique_id=getattr(self, "_unique_id", None))
         if getattr(self, "hass", None) is not None:
@@ -510,7 +465,6 @@ _ha_helpers.selector = _ha_selector
 _ha_helpers.update_coordinator = _ha_update_coordinator
 _ha_helpers.device_registry = _ha_device_registry
 _ha_helpers.entity_platform = _ha_entity_platform
-_ha_helpers.entity_registry = _ha_entity_registry
 
 _ha_top = MagicMock()
 _ha_top.config_entries = _ha_config_entries  # `from homeassistant import config_entries`
@@ -535,7 +489,6 @@ sys.modules.update(
         "homeassistant.helpers.update_coordinator": _ha_update_coordinator,
         "homeassistant.helpers.device_registry": _ha_device_registry,
         "homeassistant.helpers.entity_platform": _ha_entity_platform,
-        "homeassistant.helpers.entity_registry": _ha_entity_registry,
         "homeassistant.components": _ha_components,
         "homeassistant.components.climate": _ha_components_climate,
         "homeassistant.components.sensor": _ha_components_sensor,

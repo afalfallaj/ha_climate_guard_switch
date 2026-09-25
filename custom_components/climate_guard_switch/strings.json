@@ -2,14 +2,6 @@
   "config": {
     "step": {
       "user": {
-        "title": "Add Climate Guard Switch",
-        "description": "What do you want to add?",
-        "menu_options": {
-          "guard": "Guard switch — protect a heater/cooler relay",
-          "history": "History view — temperature, target and heating/cooling in one chart (read-only)"
-        }
-      },
-      "guard": {
         "title": "Create Climate Guard Switch",
         "description": "Configure a filtered proxy switch for your climate heater/cooler.",
         "data": {
@@ -18,33 +10,17 @@
           "sun_entity": "Sun Entity (Optional Check)",
           "weather_entity": "Weather Entity (Optional Check)",
           "climate_entity": "Linked Thermostat (For Manual Override)",
+          "temperature_sensor": "Temperature Sensor (For History Charts)",
           "allowed_weather_states": "Allowed Weather States (Empty = All)",
           "heartbeat_interval_seconds": "Heartbeat Interval (Seconds)"
         },
         "data_description": {
           "sun_entity": "Optional. When set, the target only runs while the sun is above the horizon.",
           "weather_entity": "Optional. Pairs with Allowed Weather States below to gate the target on current weather.",
-          "climate_entity": "Optional. Linking a thermostat lets a manual temperature change bypass an active cooldown once.",
+          "climate_entity": "Optional. Linking a thermostat lets a manual temperature change bypass an active cooldown once, and adds a Target temperature sensor for history charts.",
           "allowed_weather_states": "Only used when a Weather Entity is set above. Leave empty to allow any weather.",
-          "heartbeat_interval_seconds": "How often the running switch is re-pulsed (keeps the hardware's own auto-off timer refreshed) and how often the Run Limit cutoff is checked. Set to 0 to disable both — including Run Limit enforcement, even if Run Limit itself is set above 0."
-        }
-      },
-      "history": {
-        "title": "Create History view",
-        "description": "Adds a read-only device with sensors for the target temperature and for the temperature while heating / while cooling, so a chart card can show the temperature, its target and the heating/cooling periods together for any date range. The entities can come from any integration.\n\nHistory starts when this device is added. The sensors are kept as long-term statistics indefinitely. See the README for card examples.",
-        "data": {
-          "name": "Name",
-          "temperature_sensor": "Temperature sensor",
-          "climate_entity": "Thermostat (For The Target Line)",
-          "heating_entity": "Heating (Relay Or Switch)",
-          "cooling_entity": "Cooling (Relay Or Switch)"
-        },
-        "data_description": {
-          "name": "Used as the device name.",
-          "temperature_sensor": "The temperature the heating/cooling marks are drawn on. Required.",
-          "climate_entity": "Optional. Adds the Target temperature sensor (the target line).",
-          "heating_entity": "Optional. Marks the periods this is on in the chart. Pick the physical relay so the chart shows what actually ran, not what was requested.",
-          "cooling_entity": "Optional. Marks the periods this is on in the chart. Pick the physical relay so the chart shows what actually ran, not what was requested."
+          "heartbeat_interval_seconds": "How often the running switch is re-pulsed (keeps the hardware's own auto-off timer refreshed) and how often the Run Limit cutoff is checked. Set to 0 to disable both — including Run Limit enforcement, even if Run Limit itself is set above 0.",
+          "temperature_sensor": "Optional. Adds a \"Temperature while heating\" (or cooling) sensor that carries this temperature only while the relay is on, so a chart card can mark the heating/cooling periods in the temperature chart for any date range. If empty, the linked thermostat's current temperature is used."
         }
       },
       "reconfigure": {
@@ -62,7 +38,7 @@
       "already_configured": "Device is already configured",
       "already_in_progress": "Configuration flow is already in progress",
       "reconfigure_successful": "Re-configuration was successful",
-      "history_reconfigure": "History views have no device type — use Configure to change their inputs."
+      "history_view_removed": "History views were replaced by the guard's own sensors. Delete this entry and use the sensors on your guard device."
     }
   },
   "options": {
@@ -75,32 +51,24 @@
           "sun_entity": "Sun Entity (Optional Check)",
           "weather_entity": "Weather Entity (Optional Check)",
           "climate_entity": "Linked Thermostat (For Manual Override)",
+          "temperature_sensor": "Temperature Sensor (For History Charts)",
           "allowed_weather_states": "Allowed Weather States (Empty = All)",
           "heartbeat_interval_seconds": "Heartbeat Interval (Seconds)"
         },
         "data_description": {
           "sun_entity": "Optional. When set, the target only runs while the sun is above the horizon.",
           "weather_entity": "Optional. Pairs with Allowed Weather States below to gate the target on current weather.",
-          "climate_entity": "Optional. Linking a thermostat lets a manual temperature change bypass an active cooldown once.",
+          "climate_entity": "Optional. Linking a thermostat lets a manual temperature change bypass an active cooldown once, and adds a Target temperature sensor for history charts.",
           "allowed_weather_states": "Only used when a Weather Entity is set above. Leave empty to allow any weather.",
-          "heartbeat_interval_seconds": "How often the running switch is re-pulsed (keeps the hardware's own auto-off timer refreshed) and how often the Run Limit cutoff is checked. Set to 0 to disable both — including Run Limit enforcement, even if Run Limit itself is set above 0."
-        }
-      },
-      "history": {
-        "title": "Configure History view",
-        "data": {
-          "temperature_sensor": "Temperature sensor",
-          "climate_entity": "Thermostat (For The Target Line)",
-          "heating_entity": "Heating (Relay Or Switch)",
-          "cooling_entity": "Cooling (Relay Or Switch)"
-        },
-        "data_description": {
-          "temperature_sensor": "The temperature the heating/cooling marks are drawn on. Required.",
-          "climate_entity": "Optional. Adds the Target temperature sensor (the target line).",
-          "heating_entity": "Optional. Marks the periods this is on in the chart. Pick the physical relay so the chart shows what actually ran, not what was requested.",
-          "cooling_entity": "Optional. Marks the periods this is on in the chart. Pick the physical relay so the chart shows what actually ran, not what was requested."
+          "heartbeat_interval_seconds": "How often the running switch is re-pulsed (keeps the hardware's own auto-off timer refreshed) and how often the Run Limit cutoff is checked. Set to 0 to disable both — including Run Limit enforcement, even if Run Limit itself is set above 0.",
+          "temperature_sensor": "Optional. Adds a \"Temperature while heating\" (or cooling) sensor that carries this temperature only while the relay is on, so a chart card can mark the heating/cooling periods in the temperature chart for any date range. If empty, the linked thermostat's current temperature is used."
         }
       }
+    }
+  },
+  "exceptions": {
+    "history_view_removed": {
+      "message": "History views were replaced by the guard's own sensors. Delete this entry and use the sensors on your guard device."
     }
   },
   "entity": {

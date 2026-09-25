@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from homeassistant.components.climate import ATTR_CURRENT_TEMPERATURE
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -19,16 +20,16 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import GuardSwitchConfigEntry
 from .const import (
     CONF_CLIMATE_ENTITY,
-    CONF_COOLING_ENTITY,
-    CONF_HEATING_ENTITY,
+    CONF_DEVICE_TYPE,
+    CONF_TARGET_ENTITY,
     CONF_TEMPERATURE_SENSOR,
+    DEVICE_TYPE_COOLER,
     DOMAIN,
 )
 from .coordinator import ClimateGuardCoordinator
 from .history import (
-    history_config,
-    history_device_info,
-    is_history_entry,
+    guard_device_info,
+    is_on,
     read_float_attribute,
     source_available,
     trace_temperature,
@@ -40,11 +41,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Climate Guard Switch sensor entities."""
-    if is_history_entry(config_entry):
-        async_add_entities(_history_sensors(config_entry))
-        return
-
-    async_add_entities([GuardStatusSensor(config_entry.runtime_data, config_entry)])
+    async_add_entities(
+        [GuardStatusSensor(config_entry.runtime_data, config_entry), *_chart_sensors(config_entry)]
+    )
 
 
 class GuardStatusSensor(CoordinatorEntity[ClimateGuardCoordinator], SensorEntity):
@@ -84,32 +83,30 @@ class GuardStatusSensor(CoordinatorEntity[ClimateGuardCoordinator], SensorEntity
         }
 
 
-def _history_sensors(config_entry: ConfigEntry) -> list[HistorySensor]:
-    """The sensors of a History view: one per configured optional input.
+def _chart_sensors(config_entry: ConfigEntry) -> list[HistorySensor]:
+    """The guard's history chart sensors, built from what the guard already knows.
 
     Only sensors get long-term statistics (kept forever, unlike raw states), and
     Home Assistant draws values of one kind in one chart. Publishing the target
-    and the heating/cooling periods *as temperatures* is what lets a card show
+    and the periods the relay ran *as temperatures* is what lets a card show
     them together with the temperature, for any date range.
     """
-    config = history_config(config_entry)
-    temperature = config.get(CONF_TEMPERATURE_SENSOR)
+    config = {**config_entry.data, **config_entry.options}
+    relay = config.get(CONF_TARGET_ENTITY)
     thermostat = config.get(CONF_CLIMATE_ENTITY)
-    heating = config.get(CONF_HEATING_ENTITY)
-    cooling = config.get(CONF_COOLING_ENTITY)
+    temperature = config.get(CONF_TEMPERATURE_SENSOR)
+    cools = config.get(CONF_DEVICE_TYPE) == DEVICE_TYPE_COOLER
 
     sensors: list[HistorySensor] = []
     if thermostat:
         sensors.append(HistoryTargetTemperatureSensor(config_entry, thermostat))
-    if temperature and heating:
-        sensors.append(HistoryTraceSensor(config_entry, temperature, heating, "temperature_while_heating"))
-    if temperature and cooling:
-        sensors.append(HistoryTraceSensor(config_entry, temperature, cooling, "temperature_while_cooling"))
+    if relay and (temperature or thermostat):
+        sensors.append(HistoryTraceSensor(config_entry, temperature, thermostat, relay, cools))
     return sensors
 
 
 class HistorySensor(SensorEntity):
-    """Read-only temperature sensor derived from the source entities of a History view."""
+    """Read-only temperature sensor derived from entities the guard is configured with."""
 
     _attr_has_entity_name = True
     _attr_should_poll = False
@@ -122,7 +119,7 @@ class HistorySensor(SensorEntity):
         self._sources = sources
         self._attr_unique_id = f"{config_entry.entry_id}_{key}"
         self._attr_translation_key = key
-        self._attr_device_info = history_device_info(config_entry)
+        self._attr_device_info = guard_device_info(config_entry)
 
     def _state_of(self, index: int) -> State | None:
         return self.hass.states.get(self._sources[index])
@@ -169,7 +166,7 @@ class HistoryTargetTemperatureSensor(HistorySensor):
 
 
 class HistoryTraceSensor(HistorySensor):
-    """The temperature, present only while the heating (or cooling) entity is on.
+    """The temperature, present only while the guarded relay is on.
 
     Home Assistant draws values of one kind in one chart and keeps long-term
     statistics only for sensors. A temperature that exists only while the
@@ -177,16 +174,33 @@ class HistoryTraceSensor(HistorySensor):
     and blue) inside the temperature chart for any date range: list it after
     the temperature in a history-graph card, or in a statistics-graph card with
     period: hour. Idle time is `unknown`, never a made-up number.
+
+    It follows the hardware relay itself (what actually ran), not the guard's
+    own bookkeeping.
     """
 
-    def __init__(self, config_entry: ConfigEntry, temperature_sensor: str, activity: str, key: str) -> None:
-        """Initialize; `key` is "temperature_while_heating" or "temperature_while_cooling"."""
-        super().__init__(config_entry, (temperature_sensor, activity), key)
-        self._attr_icon = (
-            "mdi:thermometer-chevron-up" if key == "temperature_while_heating" else "mdi:thermometer-chevron-down"
-        )
+    def __init__(
+        self,
+        config_entry: ConfigEntry,
+        temperature_sensor: str | None,
+        thermostat: str | None,
+        relay: str,
+        cools: bool,
+    ) -> None:
+        """Initialize; the temperature comes from the sensor, else the thermostat's current temperature."""
+        self._temperature_sensor = temperature_sensor
+        # A stable unique_id: changing the guard's device type only renames the sensor.
+        super().__init__(config_entry, (temperature_sensor or thermostat, relay), "temperature_while_running")
+        self._attr_translation_key = "temperature_while_cooling" if cools else "temperature_while_heating"
+        self._attr_icon = "mdi:thermometer-chevron-down" if cools else "mdi:thermometer-chevron-up"
 
     @property
     def native_value(self) -> float | None:
-        """The temperature while the activity entity is on, else None."""
-        return trace_temperature(self.hass, self._sources[0], self._state_of(1), self.native_unit_of_measurement)
+        """The temperature while the relay is on, else None."""
+        relay = self._state_of(1)
+        if self._temperature_sensor:
+            return trace_temperature(self.hass, self._temperature_sensor, relay, self.native_unit_of_measurement)
+        if not is_on(relay):
+            return None
+        # The thermostat's current temperature is already in the system unit.
+        return read_float_attribute(self._state_of(0), ATTR_CURRENT_TEMPERATURE)
